@@ -653,8 +653,8 @@ body {
 .imm-spinner { display:inline-block; width:18px; height:18px; border-radius:50%; border:3px solid rgba(255,255,255,0.08); border-top-color:var(--clr-primary); animation: spin 0.9s linear infinite; vertical-align:middle; margin-left:8px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* Immigration background placeholder */
-.screen#screen-immigration { background-image: linear-gradient(180deg, rgba(0,0,0,0.6), rgba(10,10,20,0.6)), url('/public/immigration-bg-placeholder.jpg'); background-size: cover; background-position: center; }
+/* Immigration background */
+.screen#screen-immigration { background: linear-gradient(180deg, rgba(10,10,20,0.95), rgba(7,7,13,0.98)); background-size: cover; background-position: center; }
 
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0; }
 

@@ -1074,9 +1074,40 @@ function getFallbackLifeScript(dna) {
   };
 }
 
-// ─── Start ────────────────────────────────────────────────────────
-app.listen(PORT, () => {
-  console.log(`\n🎮 ENNE KOLLAND IRIKKAN PATTO? — Server on port ${PORT}`);
-  console.log(`   NVIDIA: ${process.env.NVIDIA_API_KEY ? '✓' : '✗'}  Gemini: ${process.env.GEMINI_API_KEY ? '✓' : '✗'}`);
-  console.log(`   RACE MODE: Both AIs fire simultaneously, fastest valid response wins\n`);
-});
+// ─── Start / Export ────────────────────────────────────────────────
+if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
+  if (process.argv[1] && process.argv[1].replace(/\\/g, '/').endsWith('server.js')) {
+    app.listen(PORT, () => {
+      console.log(`\n🎮 ENNE KOLLAND IRIKKAN PATTO? — Server on port ${PORT}`);
+      console.log(`   NVIDIA: ${process.env.NVIDIA_API_KEY ? '✓' : '✗'}  Gemini: ${process.env.GEMINI_API_KEY ? '✓' : '✗'}`);
+      console.log(`   RACE MODE: Both AIs fire simultaneously, fastest valid response wins\n`);
+    });
+  }
+}
+
+export default app;
+export {
+  raceBirth,
+  raceManualBirth,
+  raceLifeScript,
+  raceAIs,
+  localImmigrationHeuristic,
+  getFallbackLifeScript,
+  validateDNA,
+  validateLifeScript,
+  callGeminiText,
+  callGeminiImage,
+  callGeminiBirth,
+  callGeminiManualBirth,
+  callGeminiLifeScript,
+  callNvidiaText,
+  callNvidiaImage,
+  callNvidiaStreamImage,
+  callNvidiaStreamText,
+  callNvidiaBirth,
+  callNvidiaStreamBirth,
+  callNvidiaManualBirth,
+  callNvidiaStreamManualBirth,
+  callNvidiaLifeScript,
+  callNvidiaStreamLifeScript
+};

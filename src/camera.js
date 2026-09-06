@@ -64,7 +64,7 @@ export class Camera {
       try {
         const hint = document.getElementById('camera-hint');
         if (hint) {
-          hint.textContent = `Camera error: ${err.message} — check browser permissions or use a secure (localhost) connection.`;
+          hint.textContent = `Camera error: ${err.message} — check browser permissions or ensure you are on HTTPS.`;
           hint.style.color = '#e74c3c';
         }
       } catch {}
