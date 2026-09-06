@@ -13,36 +13,33 @@ export class AudioManager {
     this.sounds = {};
     this.isLoaded = false;
     this.isMuted = false;
+    this.audioCtx = null;
+  }
+
+  _getAudioContext() {
+    if (!this.audioCtx) {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (AudioCtx) this.audioCtx = new AudioCtx();
+    }
+    if (this.audioCtx && this.audioCtx.state === 'suspended') {
+      this.audioCtx.resume().catch(() => {});
+    }
+    return this.audioCtx;
   }
 
   /**
-   * Preload all sound effects.
-   * Sounds are loaded from /sounds/ directory.
-   * Missing files are silently skipped.
+   * Preload audio files that actually exist.
    */
   async loadSounds() {
     const soundMap = {
-      // Signature project sounds (user will provide these MP3s)
-      signature1: '/sounds/signature1.mp3',
-      signature2: '/sounds/signature2.mp3',
-
-      // UI sounds (we'll add these later with free SFX)
-      stamp: '/sounds/stamp.mp3',
-      scan: '/sounds/scan.mp3',
-      reveal: '/sounds/reveal.mp3',
-      click: '/sounds/click.mp3',
-      death: '/sounds/death.mp3',
-      // Project-provided assets (preferred location)
-      v: '/assets/audio/v.mp3',
-      chath: '/assets/audio/chath.mp3',
-      // life-summary tune (project root fallback)
-      lst: '/lst.mp3',
+      v: '/v.mp3',
+      chath: '/chath.mp3',
+      lst: '/lst.mp3'
     };
 
     const loadPromises = Object.entries(soundMap).map(async ([name, path]) => {
       try {
         const audio = new Audio(path);
-        // Try to load — if file doesn't exist, this will fail silently
         await new Promise((resolve, reject) => {
           audio.addEventListener('canplaythrough', resolve, { once: true });
           audio.addEventListener('error', reject, { once: true });
@@ -50,21 +47,15 @@ export class AudioManager {
         });
         this.sounds[name] = audio;
       } catch {
-        // File doesn't exist yet — that's fine, we'll skip it
-        console.log(`[AUDIO] Skipped (not found): ${name}`);
+        // Fallback or skip silently
       }
     });
 
     await Promise.allSettled(loadPromises);
     this.isLoaded = true;
-
-    const loaded = Object.keys(this.sounds);
-    console.log(`[AUDIO] Loaded ${loaded.length} sounds:`, loaded);
+    console.log(`[AUDIO] Ready. Loaded tracks:`, Object.keys(this.sounds));
   }
 
-  /**
-   * Play the supplied intro voice 'v' if loaded.
-   */
   playIntroVoice() {
     if (this.isMuted) return null;
     const a = this.sounds.v;
@@ -74,48 +65,91 @@ export class AudioManager {
     return clone;
   }
 
-  /**
-   * Play the chath death sound exactly once per invocation.
-   * Prevents duplicate replay during repeated renders.
-   */
   playDeathSound() {
     if (this.isMuted) return;
-    if (this._deathPlaying) return; // already playing
-    const a = this.sounds.chath || this.sounds.death;
-    if (!a) return;
-    this._deathPlaying = true;
-    const clone = a.cloneNode();
-    clone.addEventListener('ended', () => { this._deathPlaying = false; });
-    clone.play().catch(() => { this._deathPlaying = false; });
+    if (this._deathPlaying) return;
+    const a = this.sounds.chath;
+    if (a) {
+      this._deathPlaying = true;
+      const clone = a.cloneNode();
+      clone.addEventListener('ended', () => { this._deathPlaying = false; });
+      clone.play().catch(() => { this._deathPlaying = false; });
+    } else {
+      this._synthBeep(120, 0.6, 'sawtooth');
+    }
   }
 
-  /**
-   * Reset death-play flag (call when starting a new life/game)
-   */
   resetDeathFlag() {
     this._deathPlaying = false;
   }
 
-  /**
-   * Play a sound effect by name.
-   * @param {string} name - Sound name (e.g., 'stamp', 'signature1')
-   * @param {number} volume - Volume 0-1 (default 0.7)
-   */
   play(name, volume = 0.7) {
     if (this.isMuted) return;
 
-    const sound = this.sounds[name];
-    if (!sound) return; // Sound not loaded, skip silently
+    if (this.sounds[name]) {
+      const clone = this.sounds[name].cloneNode();
+      clone.volume = Math.max(0, Math.min(1, volume));
+      clone.play().catch(() => {});
+      return;
+    }
 
-    // Clone for overlapping plays
-    const clone = sound.cloneNode();
-    clone.volume = Math.max(0, Math.min(1, volume));
-    clone.play().catch(() => {
-      // Autoplay blocked — ignore
+    // Synthesize UI sounds dynamically with Web Audio
+    try {
+      if (name === 'click') {
+        this._synthBeep(800, 0.05, 'sine', volume * 0.4);
+      } else if (name === 'scan') {
+        this._synthBeep(520, 0.15, 'triangle', volume * 0.5);
+      } else if (name === 'stamp') {
+        this._synthStamp(volume);
+      } else if (name === 'reveal') {
+        this._synthChord([440, 554, 659, 880], 0.35, volume * 0.4);
+      } else if (name === 'death') {
+        this.playDeathSound();
+      }
+    } catch {}
+  }
+
+  _synthBeep(freq, duration, type = 'sine', vol = 0.3) {
+    const ctx = this._getAudioContext();
+    if (!ctx) return;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, ctx.currentTime);
+    gain.gain.setValueAtTime(vol, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + duration);
+  }
+
+  _synthStamp(vol = 0.7) {
+    const ctx = this._getAudioContext();
+    if (!ctx) return;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(160, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(40, ctx.currentTime + 0.15);
+    gain.gain.setValueAtTime(vol * 0.6, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.18);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.18);
+  }
+
+  _synthChord(freqs, duration, vol = 0.3) {
+    const ctx = this._getAudioContext();
+    if (!ctx) return;
+    freqs.forEach((f, i) => {
+      setTimeout(() => {
+        this._synthBeep(f, duration, 'sine', vol / freqs.length);
+      }, i * 40);
     });
   }
 
-  /** Toggle mute */
   toggleMute() {
     this.isMuted = !this.isMuted;
     return this.isMuted;
