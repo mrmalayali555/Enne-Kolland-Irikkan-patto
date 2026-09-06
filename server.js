@@ -30,20 +30,25 @@ app.get('/api/health', (_req, res) => {
 
 // ─── Birth endpoint: detect object + generate passport DNA ───────
 app.post('/api/birth', async (req, res) => {
-  const { image, manualName } = req.body;
+  const { image, frames, manualName } = req.body;
 
-  if (!image && !manualName) {
-    return res.status(400).json({ error: 'No image or object name provided' });
+  if (!image && !frames && !manualName) {
+    return res.status(400).json({ error: 'No image, frames or object name provided' });
   }
 
   try {
-    let dna;
-    if (image) {
-      dna = await raceBirth(image);
-    } else {
-      dna = await raceManualBirth(manualName);
+    if (frames && Array.isArray(frames) && frames.length > 0) {
+      const result = await consensusBirth(frames);
+      return res.json({ success: true, ...result });
     }
-    res.json({ success: true, dna });
+
+    if (image) {
+      const result = await consensusBirth([image]);
+      return res.json({ success: true, ...result });
+    }
+
+    const dna = await raceManualBirth(manualName);
+    return res.json({ success: true, dna, confidence: 1.0, candidates: [manualName], needsRescan: false });
   } catch (err) {
     console.error('[BIRTH ERROR]', err.message);
     res.status(500).json({ error: 'AI birth failed', details: err.message });
@@ -320,7 +325,7 @@ function normalizeObjectName(raw) {
  * @param {string[]} frames - Array of base64 data URIs (1–3)
  * @returns {Promise<{dna, confidence, candidates, needsRescan}>}
  */
-export async function consensusBirth(frames) {
+async function consensusBirth(frames) {
   // ── Phase 1: run vision detection on all frames in parallel ─────
   const frameResultSets = await Promise.allSettled(
     frames.map(async (frame, idx) => {
