@@ -196,7 +196,7 @@ Before our object is allowed to have a life, it must first deal with the most po
 
 The system generates a passport containing the object's identity and AI-generated characteristics.
 
-![Object Passport](screenshots/Screenshot%202026-09-06%20064800.png)
+![Object Passport](screenshots/Screenshot%202026-09-06%20064646.png)
 
 *The object receives its very important and completely unnecessary government-issued identity.*
 
@@ -218,7 +218,7 @@ The immigration officer asks questions, investigates suspicious behaviour, and d
 
 After surviving immigration, the object enters an interactive world where its decisions begin shaping its future.
 
-![Object Life](screenshots/Screenshot%202026-09-06%20064646.png)
+![Object Life]()
 
 *The object finally gets to experience the life it probably never asked for.*
 
@@ -231,6 +231,15 @@ The player can explore the world and encounter situations that are generated aro
 ![Gameplay](screenshots/Screenshot%202026-09-06%20064613.png)
 
 *The object explores the world while slowly making increasingly questionable life decisions.*
+
+---
+### 5. The Death
+Just Died 
+
+
+![Death](screenshots/Screenshot%202026-09-06%20064800.png)
+
+*The object finally gets to experience the life it probably never asked for.*
 
 ---
 
