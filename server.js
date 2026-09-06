@@ -23,6 +23,7 @@ app.get('/api/health', (_req, res) => {
   res.json({
     status: 'alive',
     nvidia: !!process.env.NVIDIA_API_KEY,
+    nvidia_stream: !!process.env.NVIDIA_STREAM_KEY,
     gemini: !!process.env.GEMINI_API_KEY,
   });
 });
@@ -66,56 +67,85 @@ app.post('/api/life-script', async (req, res) => {
   }
 });
 
-// ─── Immigration endpoint: live AI reaction to player's typed answer ─
+// ─── Immigration endpoint: live AI chat with officer ─────────────
 app.post('/api/immigration', async (req, res) => {
   const { dna, question, answer, final, lang } = req.body;
   if (!dna) return res.status(400).json({ error: 'Missing dna' });
 
-  const IMMIGRATION_PROMPT = `You are an IMMIGRATION OFFICER for the Republic of Objects.\n
-  
-  Respond in a funny, sarcastic Manglish officer voice (short sentences), and return a JSON object EXACTLY with keys: { "reply": string, "decision": "approve"|"reject"|"ask_more" }.
+  const objectName = dna.name || 'Unknown Object';
+  const objectType = dna.objectType || 'object';
 
-  RULES:
-  - Use Manglish (Malayalam words written in Latin) where possible; short, punchy, and comedic.
-  - If the answer is plausible for the object's type (banana says "for sale", can says "holiday"), return "approve".
-  - If it mentions hiding, smuggling, or dangerous behavior, return "ask_more" or "reject" based on severity.
-  - For the "prove you are NOT a human" question, design a short follow-up test or witty counter (e.g., ask for a weird joke, sound imitation, or smell claim) and decide accordingly.
-  - Keep the reply short (<= 120 chars). DO NOT output anything except valid JSON.
+  const IMMIGRATION_PROMPT = `You are an EXTREMELY SUSPICIOUS, HILARIOUS, RUDE, DRAMATIC IMMIGRATION OFFICER at the border checkpost of the "Republic of Objects".
+You speak in colorful, punchy MANGLISH (Malayalam words in English letters + English).
+You are interrogating an object named "${objectName}" which claims to be a ${objectType}.
 
-  EXAMPLE valid reply:
-  { "reply": "Aiyo, okay — holiday aano? Passport nodu. Entry allowed.", "decision": "approve" }
+YOUR COMEDIC PERSONALITY:
+- You NEVER believe they are what they claim to be! You always accuse them of being a crazy impostor or undercover spy:
+  * If banana/fruit: "You say banana? Prove you are not a 60W Philips bulb spying for KSEB!"
+  * If pen/pencil: "Look at your suspicious nib! You are an undercover missile with ink propulsion!"
+  * If bottle/cup: "Smuggling illegal tap water ah?! Where is your ISI trademark certificate?!"
+  * If utensil/tool: "Very dangerous weapon shape! Are you planning a kitchen coup d'état?!"
+  * Any other object: Accuse them of being a fake imitation or dangerous undercover gadget!
+- You give absurd, hilarious, impossible challenges / tasks to prove their identity:
+  * "Sing your manufacturing serial number in classical Carnatic raga!"
+  * "Prove you cannot emit 1000 lumens right now!"
+  * "Why are you looking at me with zero facial expression?! Adichu shape maattum!"
+  * "Where is your owner's horoscope? Without Jathakam, no entry!"
+- If they mention a bribe (₹50, cash, money, pay):
+  * Be openly comedic: "Aha! Bribe?! *looks around* I am 100% honest officer... *pockets ₹50* ...okay fine! ₹50 tea charge accepted! APPROVED!"
+- Use hilarious Malayalam slang naturally: "mwone", "machane", "aiyo", "poda", "enthuvade", "scene mone", "adichu shape maattum", "pwoli", "kidu", "durandam".
+- Keep every reply SHORT (1-2 punchy sentences, max 160 characters), super sharp, rude and funny.
 
-  Do not include any extra text outside the JSON.`;
+DECISION CRITERIA:
+- "ask_more": Default for normal interrogation (keep roasting and grilling them with hilarious challenges).
+- "approve": Give this if the conversation has 3+ exchanges, OR if the player gives a hilarious/witty comeback, or offers a bribe. When approving, say: "*STAMPS PASSPORT* Passport APPROVED! Kadannu po mwone! Tap continue."
+- "reject": Very rarely, only for extreme drama.
 
-    // If no AI keys configured, give a fast local Manglish-flavored heuristic reply
-    if (!process.env.GEMINI_API_KEY && !process.env.NVIDIA_API_KEY) {
+OUTPUT FORMAT: Return ONLY a JSON object:
+{"reply": "your funny Manglish roast/challenge", "decision": "ask_more"|"approve"|"reject"}`;
+
+  try {
+    // If no AI keys, use enhanced local heuristic
+    if (!process.env.GEMINI_API_KEY && !process.env.NVIDIA_API_KEY && !process.env.NVIDIA_STREAM_KEY) {
       const quick = localImmigrationHeuristic(dna, question, answer, lang);
       return res.json({ success: true, reply: quick.reply, decision: quick.decision });
     }
 
-    // Build the user prompt: support aggregated answers (final decision) or single Q/A
-    let userPrompt;
-    if (Array.isArray(req.body.answers)) {
-      const lines = req.body.answers.map((a, idx) => `Q${idx + 1}: ${a.question}\nA${idx + 1}: ${a.answer || ''}\nReply: ${a.reply || ''}\nDecision: ${a.decision || ''}`);
-      userPrompt = `IMMIGRATION AGGREGATE REVIEW:\n${lines.join('\n')}\nCONTEXT: ${dna.name} (${dna.objectType})\nLANG: ${lang || 'manglish'}`;
-    } else {
-      userPrompt = `QUESTION: ${question || ''}\nPLAYER_ANSWER: ${answer || ''}\nCONTEXT: ${dna.name} (${dna.objectType})\nLANG: ${lang || 'manglish'}`;
+    // Build conversational user prompt
+    const conversation = req.body.conversation || [];
+    let userPrompt = `OFFICER'S QUESTION: "${question}"\nOBJECT'S ANSWER: "${answer || '(silence)'}"\nLANGUAGE PREFERENCE: ${lang || 'manglish'}\n`;
+    if (Array.isArray(conversation) && conversation.length > 0) {
+      userPrompt += '\nFULL CHAT SO FAR:\n';
+      for (const m of conversation.slice(-10)) { // last 10 messages for context
+        const role = (m.role || 'user') === 'user' ? 'OBJECT' : 'OFFICER';
+        userPrompt += `${role}: ${(m.text || '').substring(0, 200)}\n`;
+      }
     }
+    userPrompt += '\nNow respond as the officer. Be FUNNY. Return JSON only.';
 
-    // Otherwise race AIs but with a safety timeout to keep responses snappy
-    const aiPromise = raceAIs(api => api === 'gemini' ? callGeminiText(IMMIGRATION_PROMPT, userPrompt, 'Immigration') : callNvidiaText(IMMIGRATION_PROMPT, userPrompt, 'Immigration'));
-    const timed = Promise.race([
+    // Race all available AIs — first valid response wins
+    const aiPromise = raceAIs(api => {
+      if (api === 'gemini') return callGeminiText(IMMIGRATION_PROMPT, userPrompt, 'Immigration');
+      if (api === 'nvidia') return callNvidiaText(IMMIGRATION_PROMPT, userPrompt, 'Immigration');
+      return callNvidiaStreamText(IMMIGRATION_PROMPT, userPrompt, 'Immigration');
+    });
+
+    const result = await Promise.race([
       aiPromise,
-      new Promise((resolve) => setTimeout(() => resolve({ _timedOut: true }), 6000))
+      new Promise((resolve) => setTimeout(() => resolve({ _timedOut: true }), 20000))
     ]);
 
-    const result = await timed;
     if (result && result._timedOut) {
+      console.warn('[IMMIGRATION] AI timed out, using local fallback');
       const quick = localImmigrationHeuristic(dna, question, answer, lang);
       return res.json({ success: true, reply: quick.reply, decision: quick.decision });
     }
 
-    return res.json({ success: true, reply: result.reply || result, decision: result.decision || 'ask_more' });
+    // Validate AI response
+    const reply = (typeof result.reply === 'string') ? result.reply : JSON.stringify(result);
+    const decision = ['approve', 'reject', 'ask_more'].includes(result.decision) ? result.decision : 'ask_more';
+    return res.json({ success: true, reply, decision });
+
   } catch (err) {
     console.error('[IMMIGRATION ERROR]', err.message);
     const quick = localImmigrationHeuristic(dna, question, answer, lang);
@@ -124,36 +154,72 @@ app.post('/api/immigration', async (req, res) => {
 });
 
 function localImmigrationHeuristic(dna, question, answer, lang) {
-  // Simple playful Manglish heuristics to keep interaction snappy when AI is slow/offline
-  const obj = (dna.objectType || 'object').toLowerCase();
   const name = dna.name || 'Itthu';
+  const obj = (dna.objectType || 'object').toLowerCase();
   const ans = (answer || '').toLowerCase();
+  const q = (question || '').toLowerCase();
 
-  // If answer contains 'tour' or 'visit' or 'holiday' approve
-  if (/tour|visit|holiday|vacation|travel|tourism|vacay/.test(ans)) {
-    return { reply: `Aiyo, ok ok. ${name}inu small holiday aanu. Welcome, welcome.`, decision: 'approve' };
+  // Pool of funny Manglish responses grouped by question type
+  if (/why.*enter|enter here/i.test(q)) {
+    const pool = [
+      { r: `*slams table* "${name}" holiday-kku vannathano?! Ivide HOLIDAY illa mwone, ONLY DRAMA!`, d: 'ask_more' },
+      { r: `Aiyo ${name}, nee ${obj} aanu ennu ariyaam. But WHY HERE? Ivide ${obj}-inu enthu karyam?`, d: 'ask_more' },
+      { r: `Officer squints: "Hmm... last time oru ${obj} vannu, full scene aayirunnu. Nee athupole aano?"`, d: 'ask_more' },
+      { r: `"${ans}" ennu paranjal ENOUGH aano?! Ente file-il 47 pages undu, FULL EXPLAIN CHEYYEDA!`, d: 'ask_more' },
+      { r: `*picks up phone* "Hello security... wait." *puts phone down* "OK fine, ${name}. Continue."`, d: 'ask_more' },
+    ];
+    return pool[Math.floor(Math.random() * pool.length)];
   }
 
-  // If user says 'hide' or 'bag' or 'smuggle' ask more
-  if (/hide|bag|smuggl|hiding|fizz|buzz|sneak/.test(ans)) {
-    return { reply: `Hmmmm... Bag-il vechittundo? Explain kuttikkoru detail kond.` , decision: 'ask_more' };
+  if (/owner|who owns/i.test(q)) {
+    const pool = [
+      { r: `Owner-nte phone number thaaa! ...just kidding. ${name}, nee aarudeyaanu ennu PROVE cheyy!`, d: 'ask_more' },
+      { r: `"${ans}" ennu paranjalo? Enik ariyaam, ellaa ${obj}-um ivide fake owner parayum!`, d: 'ask_more' },
+      { r: `Aah ownerino? Owner viliche ennodu parayatte! *dramatically waits*`, d: 'ask_more' },
+      { r: `Officer writes something: "Owner: ${ans}... suspicious but acceptable." Entry allowed.`, d: 'approve' },
+    ];
+    return pool[Math.floor(Math.random() * pool.length)];
   }
 
-  // If answer mentions 'sell' or 'for sale' likely normal
-  if (/sell|for sale|market|shop|shoping|shop/.test(ans)) {
-    return { reply: `Sale aano plan? Good luck. Entry allowed.`, decision: 'approve' };
+  if (/what do you do|work|occupation/i.test(q)) {
+    const pool = [
+      { r: `${obj} job cheyyunnundo?! Tax file cheythittundo?! GST number KANIKK!`, d: 'ask_more' },
+      { r: `Hmm "${ans}" aano? Ente cousin-um ${obj} aanu, avan unemployed. Nee verae aano?`, d: 'ask_more' },
+      { r: `*stamps form* OK OK, ${name} working ${obj} aanu. Respect. Entry allowed. GO.`, d: 'approve' },
+      { r: `Officer: "Interesting... oru ${obj} with ambition. Njan impressed. Almost."`, d: 'ask_more' },
+    ];
+    return pool[Math.floor(Math.random() * pool.length)];
   }
 
-  // Otherwise random playful response leaning to ask_more
-  // Manglish-flavored playful samples
-  const samples = [
-    { r: `${name} paranju: "Njan fruit aanu, pls" — officer: "Aiyo, ok then. Entry granted."`, d: 'approve' },
-    { r: `Officer: "Ithu evidunnu vannu? Passport onnum illa? Kettadha."`, d: 'ask_more' },
-    { r: `Officer suspicious: "Bag-il vechu chodikkunne? Explain, fast."`, d: 'ask_more' },
-    { r: `Officer laughs: "Ithu enth? Njan pinne nokkam. Entry allowed."`, d: 'approve' },
-    { r: `Officer: "Dangerous karyam paranjal, thirichariyuka."`, d: 'reject' }
+  if (/prove|not a human|NOT/i.test(q)) {
+    const pool = [
+      { r: `PROVE IT! Oru human-nu cheyyaan pattaatha enthenkilum cheyy! *waits dramatically*`, d: 'ask_more' },
+      { r: `Hmm... nee breathe cheyyunnundo? No? OK FINE. ${name} is NOT human. APPROVED.`, d: 'approve' },
+      { r: `Officer touches ${name}: "Cold aanu... no heartbeat... definitely ${obj}. PASS!"`, d: 'approve' },
+      { r: `"${ans}" ennu parayunnu, but ente 20 years experience parayunnu NEE SUSPICIOUS AANU!`, d: 'ask_more' },
+    ];
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
+
+  // Generic funny fallbacks
+  if (/bribe|₹|rupee|cash|money|pay/i.test(ans)) {
+    const pool = [
+      { r: `*looks around* "Aiyo ${name}, ₹50 mathi... I mean BRIBE IS ILLEGAL! ...but leave it on the table."`, d: 'ask_more' },
+      { r: `BRIBE?! *shocked face* ...How much? Just kidding. ENTRY APPROVED before I change my mind.`, d: 'approve' },
+    ];
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
+
+  // Default funny responses
+  const defaults = [
+    { r: `${name}, ninte answer kandu enik doubt vannu. But enik vere pani undu. GO!`, d: 'approve' },
+    { r: `Officer yawns: "Athokke shariyaakum. Next question, fast fast!"`, d: 'ask_more' },
+    { r: `*suspicious stare* "${ans}" ennano paranje?! Hmm... oru karyam koodi chodikkanam.`, d: 'ask_more' },
+    { r: `Adipoli! ${name} paranjathu correct. But njan easy-ayi approve cheyyilla, one more!`, d: 'ask_more' },
+    { r: `"${ans}"... interesting. Ente ammachiyum ithupole paranjittundu. Fine, APPROVED.`, d: 'approve' },
+    { r: `*writes in notebook* "${name} said ${ans}." Evidence recorded. Proceed!`, d: 'approve' },
   ];
-  return samples[Math.floor(Math.random() * samples.length)];
+  return defaults[Math.floor(Math.random() * defaults.length)];
 }
 
 // ─── Eval Action endpoint: evaluate free-action typed by the player ─
@@ -222,21 +288,30 @@ app.get('/api/video-status/:jobId', (req, res) => {
 // ═══════════════════════════════════════════════════════════════════
 
 async function raceBirth(base64Image) {
-  return raceAIs(
-    (api) => api === 'gemini' ? callGeminiBirth(base64Image) : callNvidiaBirth(base64Image)
-  );
+  const promises = [];
+  if (process.env.GEMINI_API_KEY) promises.push(callGeminiBirth(base64Image));
+  if (process.env.NVIDIA_API_KEY) promises.push(callNvidiaBirth(base64Image));
+  if (process.env.NVIDIA_STREAM_KEY) promises.push(callNvidiaStreamBirth(base64Image));
+  if (promises.length === 0) throw new Error('No AI API keys configured');
+  try { return await Promise.any(promises); } catch (aggErr) { throw new Error(`All AIs failed: ${aggErr.message}`); }
 }
 
 async function raceManualBirth(objectName) {
-  return raceAIs(
-    (api) => api === 'gemini' ? callGeminiManualBirth(objectName) : callNvidiaManualBirth(objectName)
-  );
+  const promises = [];
+  if (process.env.GEMINI_API_KEY) promises.push(callGeminiManualBirth(objectName));
+  if (process.env.NVIDIA_API_KEY) promises.push(callNvidiaManualBirth(objectName));
+  if (process.env.NVIDIA_STREAM_KEY) promises.push(callNvidiaStreamManualBirth(objectName));
+  if (promises.length === 0) throw new Error('No AI API keys configured');
+  try { return await Promise.any(promises); } catch (aggErr) { throw new Error(`All AIs failed: ${aggErr.message}`); }
 }
 
 async function raceLifeScript(dna) {
-  return raceAIs(
-    (api) => api === 'gemini' ? callGeminiLifeScript(dna) : callNvidiaLifeScript(dna)
-  );
+  const promises = [];
+  if (process.env.GEMINI_API_KEY) promises.push(callGeminiLifeScript(dna));
+  if (process.env.NVIDIA_API_KEY) promises.push(callNvidiaLifeScript(dna));
+  if (process.env.NVIDIA_STREAM_KEY) promises.push(callNvidiaStreamLifeScript(dna));
+  if (promises.length === 0) throw new Error('No AI API keys configured');
+  try { return await Promise.any(promises); } catch (aggErr) { throw new Error(`All AIs failed: ${aggErr.message}`); }
 }
 
 /** Generic race: fire all available AIs, first valid response wins */
@@ -256,6 +331,15 @@ async function raceAIs(callFn) {
     promises.push(
       callFn('nvidia').catch(err => {
         console.error('[NVIDIA FAILED]', err.message);
+        throw err;
+      })
+    );
+  }
+
+  if (process.env.NVIDIA_STREAM_KEY) {
+    promises.push(
+      callFn('nvidia_stream').catch(err => {
+        console.error('[NVIDIA-STREAM FAILED]', err.message);
         throw err;
       })
     );
@@ -316,19 +400,30 @@ const LIFE_SCRIPT_SYSTEM_PROMPT = `You are the GAME MASTER for "Enne Kolland Iri
 
 YOUR JOB: Generate the ENTIRE life journey for the object in a single structured JSON.
 
+CRITICAL LANGUAGE RULE:
+- ALL text MUST be written in MANGLISH (Malayalam words written in English/Latin letters, mixed with English).
+- Examples of Manglish: "Ivide oru pedikkanam undu — tiffin stall close aayittund", "Aiyo, phone charge illa!", "Mwone ith bhayankara scene aanu"
+- Common words to use: "aanu", "alla", "undu", "illa", "cheyyuka", "nokkuka", "poyi", "vannu", "aayi", "ennu", "parayunnu"
+- Slang: "mwone", "machane", "aiyo", "poda", "adipoli", "pwoli", "kidu", "scene aanu", "full mass"
+- NEVER write scenes in pure formal English. Every scene, choice label, consequence, and memory MUST have Manglish flavor.
+
 RULES:
 1. The object's DNA (personality, fears, strengths, weaknesses) MUST influence the entire script.
-2. Use natural Manglish (Malayalam + English mix) — short, funny, absurd.
-3. Keep scenes, choices, and consequences SHORT (1-3 lines max).
-4. The first chapter MUST be at the Airport/Immigration.
-5. Create 4 chapters total, plus a death scene.
-6. For each chapter, generate TWO meaningful choices. For EACH choice, provide the consequence, state changes, and a short memory.
-7. State changes must logically follow the choice AND the object's nature (money, condition, mood, location).
-8. The final chapter is DEATH. The death MUST be specific to what this object IS, and written in Manglish.
+2. Keep scenes SHORT (1-3 lines max), choices punchy (3-8 words), consequences funny.
+3. The first chapter is AFTER the airport — the object just entered the country.
+4. Create exactly 4 chapters, plus a death scene.
+5. For each chapter, generate TWO meaningful choices with pre-calculated consequences.
+6. State changes: money can go between -500 and +500. Mood and condition should be funny Manglish words.
+7. The death MUST be specific to what this object IS (a pen runs out of ink, a banana rots, etc.)
+8. Make it feel like a Kerala friend telling a soap opera about household objects at 2AM after too much chai.
 
-TONE: Like a Kerala friend narrating a soap opera about household objects at 2 AM.
+COMEDY GUIDELINES:
+- Treat mundane situations with EXTREME drama ("Njan oru ₹10 note kaanum ennu vicharichaaal... POYIII!")
+- Include references to Kerala/Indian culture (auto-rickshaws, chai shops, relatives, rain)
+- Add unexpected twists ("Uncle vannu... but uncle oru goat aayirunnu")
+- Death should be tragic AND hilarious at the same time
 
-IMPORTANT: You MUST respond with ONLY valid JSON matching the exact required schema. No markdown, no code fences, no reasoning text.`;
+IMPORTANT: Return ONLY valid JSON. No markdown, no code fences, no explanation text.`;
 
 // ═══════════════════════════════════════════════════════════════════
 // JSON SCHEMAS
@@ -354,7 +449,7 @@ const PASSPORT_JSON_TEMPLATE = `{
 }`;
 
 function lifeScriptUserPrompt(dna) {
-  return `Generate the COMPLETE LIFE SCRIPT for this object.
+  return `Generate the COMPLETE LIFE SCRIPT for this object. ALL TEXT MUST BE IN MANGLISH (Malayalam words in English letters + English mix).
 
 Object: ${dna.name} (${dna.objectType})
 Personality: ${dna.personality}
@@ -363,36 +458,36 @@ Weakness: ${dna.weakness}
 Fear: ${dna.fear}
 Life Goal: ${dna.lifeGoal}
 
-Return this EXACT JSON structure:
+Return this EXACT JSON structure (with Manglish text in ALL fields):
 {
   "chapters": [
     {
-      "scene": "Scene narration in Manglish (airport for ch1, etc)",
+      "scene": "Manglish scene narration like: Airport-il ninnu purathu vannu. Oru auto-kkaran kaarundu: 'Evitta ponu mwone?'",
       "choiceA": {
-        "label": "Short action (3-8 words)",
-        "emoji": "emoji",
-        "consequence": "Result narration in Manglish",
-        "stateChanges": { "money": 10, "mood": "New mood", "condition": "New condition", "location": "New location" },
-        "memory": "Short summary of what happened"
+        "label": "Manglish action like: Auto-il kerikk",
+        "emoji": "🛺",
+        "consequence": "Manglish result like: Auto-kkaran ₹500 charge cheythu. Pakshe scene kidu aayirunnu!",
+        "stateChanges": { "money": -50, "mood": "Kidu mood", "condition": "Thakarnnu", "location": "City center" },
+        "memory": "Manglish summary like: Auto-il oru wild ride"
       },
       "choiceB": {
-        "label": "Alternative action",
-        "emoji": "emoji",
-        "consequence": "Alternative result",
-        "stateChanges": { "money": -5, "mood": "New mood", "condition": "New condition", "location": "New location" },
-        "memory": "Short summary of alternative path"
+        "label": "Alternative Manglish action like: Nadannu pokkaam",
+        "emoji": "🚶",
+        "consequence": "Alternative Manglish result like: Mazha vannu. Full nananju poyi!",
+        "stateChanges": { "money": 0, "mood": "Soggy", "condition": "Wet aanu", "location": "Road side" },
+        "memory": "Manglish summary: Mazha-il nadannu"
       }
     }
   ],
   "death": {
-    "scene": "Death narration in Manglish",
-    "deathCause": "Specific cause (5-10 words)",
-    "epitaph": "One-line funny epitaph",
-    "eulogy": "2-3 sentence life summary in Manglish"
+    "scene": "Manglish death narration like: Ella karyavum kazhinju... ${dna.name} aa pazhaya shelf-il thirichu vechu. Aarum orma illa.",
+    "deathCause": "Object-specific Manglish cause (5-10 words)",
+    "epitaph": "One-line funny Manglish epitaph",
+    "eulogy": "2-3 sentence Manglish life summary"
   }
 }
 
-NOTE: Generate exactly 4 items in the "chapters" array.`;
+NOTE: Generate exactly 4 items in the "chapters" array. EVERY text field must be Manglish, NOT plain English.`;
 }
 
 const IMAGE_USER_PROMPT = `Analyze this image. Identify the MAIN OBJECT shown (ignore people, backgrounds, hands).
@@ -425,11 +520,11 @@ All text fields should use natural Manglish where funny.`;
 // GEMINI API CALLS
 // ═══════════════════════════════════════════════════════════════════
 
-async function callGeminiText(systemPrompt, userPrompt, label) {
+async function callGeminiText(systemPrompt, userPrompt, label, retries = 2) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error('GEMINI_API_KEY not set');
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent`;
 
   const body = {
     system_instruction: { parts: [{ text: systemPrompt }] },
@@ -444,35 +539,49 @@ async function callGeminiText(systemPrompt, userPrompt, label) {
   console.log(`[GEMINI] ${label}...`);
   const startTime = Date.now();
 
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-goog-api-key': apiKey },
+      body: JSON.stringify(body),
+    });
 
-  if (!response.ok) {
-    const errBody = await response.text();
-    throw new Error(`Gemini API ${response.status}: ${errBody.substring(0, 300)}`);
+    if (!response.ok) {
+      const errBody = await response.text();
+      if ((response.status === 503 || response.status === 429) && retries > 0) {
+        console.warn(`[GEMINI] ${response.status} spike on ${label}. Retrying in 800ms (${retries} left)...`);
+        await new Promise(r => setTimeout(r, 800));
+        return await callGeminiText(systemPrompt, userPrompt, label, retries - 1);
+      }
+      throw new Error(`Gemini API ${response.status}: ${errBody.substring(0, 300)}`);
+    }
+
+    const data = await response.json();
+    console.log(`[GEMINI] ${label} done in ${Date.now() - startTime}ms`);
+
+    const content = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!content) throw new Error('No content in Gemini response');
+
+    const parsed = extractJSON(content);
+    if (!parsed) throw new Error('Could not parse JSON from Gemini response');
+
+    return parsed;
+  } catch (err) {
+    if (retries > 0 && /503|429|fetch failed/i.test(err.message)) {
+      console.warn(`[GEMINI] Network/Service issue on ${label}. Retrying in 800ms (${retries} left)...`);
+      await new Promise(r => setTimeout(r, 800));
+      return await callGeminiText(systemPrompt, userPrompt, label, retries - 1);
+    }
+    throw err;
   }
-
-  const data = await response.json();
-  console.log(`[GEMINI] ${label} done in ${Date.now() - startTime}ms`);
-
-  const content = data.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!content) throw new Error('No content in Gemini response');
-
-  const parsed = extractJSON(content);
-  if (!parsed) throw new Error('Could not parse JSON from Gemini response');
-
-  return parsed;
 }
 
-async function callGeminiImage(systemPrompt, userPrompt, base64Image, label) {
+async function callGeminiImage(systemPrompt, userPrompt, base64Image, label, retries = 2) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error('GEMINI_API_KEY not set');
 
   const rawBase64 = base64Image.replace(/^data:image\/\w+;base64,/, '');
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent`;
 
   const body = {
     system_instruction: { parts: [{ text: systemPrompt }] },
@@ -492,27 +601,41 @@ async function callGeminiImage(systemPrompt, userPrompt, base64Image, label) {
   console.log(`[GEMINI] ${label}...`);
   const startTime = Date.now();
 
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-goog-api-key': apiKey },
+      body: JSON.stringify(body),
+    });
 
-  if (!response.ok) {
-    const errBody = await response.text();
-    throw new Error(`Gemini API ${response.status}: ${errBody.substring(0, 300)}`);
+    if (!response.ok) {
+      const errBody = await response.text();
+      if ((response.status === 503 || response.status === 429) && retries > 0) {
+        console.warn(`[GEMINI] ${response.status} spike on ${label}. Retrying in 800ms (${retries} left)...`);
+        await new Promise(r => setTimeout(r, 800));
+        return await callGeminiImage(systemPrompt, userPrompt, base64Image, label, retries - 1);
+      }
+      throw new Error(`Gemini API ${response.status}: ${errBody.substring(0, 300)}`);
+    }
+
+    const data = await response.json();
+    console.log(`[GEMINI] ${label} done in ${Date.now() - startTime}ms`);
+
+    const content = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!content) throw new Error('No content in Gemini response');
+
+    const parsed = extractJSON(content);
+    if (!parsed) throw new Error('Could not parse JSON from Gemini response');
+
+    return parsed;
+  } catch (err) {
+    if (retries > 0 && /503|429|fetch failed/i.test(err.message)) {
+      console.warn(`[GEMINI] Network/Service issue on ${label}. Retrying in 800ms (${retries} left)...`);
+      await new Promise(r => setTimeout(r, 800));
+      return await callGeminiImage(systemPrompt, userPrompt, base64Image, label, retries - 1);
+    }
+    throw err;
   }
-
-  const data = await response.json();
-  console.log(`[GEMINI] ${label} done in ${Date.now() - startTime}ms`);
-
-  const content = data.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!content) throw new Error('No content in Gemini response');
-
-  const parsed = extractJSON(content);
-  if (!parsed) throw new Error('Could not parse JSON from Gemini response');
-
-  return parsed;
 }
 
 // Gemini birth calls
@@ -537,8 +660,8 @@ async function callGeminiLifeScript(dna) {
 // ═══════════════════════════════════════════════════════════════════
 
 async function callNvidiaText(systemPrompt, userPrompt, label) {
-  const apiKey = process.env.NVIDIA_API_KEY;
-  if (!apiKey) throw new Error('NVIDIA_API_KEY not set');
+  const apiKey = process.env.NVIDIA_API_KEY || process.env.NVIDIA_STREAM_KEY;
+  if (!apiKey) throw new Error('NVIDIA API key not set');
 
   const payload = {
     model: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning',
@@ -584,15 +707,15 @@ async function callNvidiaText(systemPrompt, userPrompt, label) {
 }
 
 async function callNvidiaImage(systemPrompt, userPrompt, base64Image, label) {
-  const apiKey = process.env.NVIDIA_API_KEY;
-  if (!apiKey) throw new Error('NVIDIA_API_KEY not set');
+  const apiKey = process.env.NVIDIA_STREAM_KEY || process.env.NVIDIA_API_KEY;
+  if (!apiKey) throw new Error('NVIDIA API key not set');
 
   const imageUrl = base64Image.startsWith('data:')
     ? base64Image
     : `data:image/jpeg;base64,${base64Image}`;
 
   const payload = {
-    model: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning',
+    model: 'meta/llama-3.2-11b-vision-instruct',
     messages: [
       { role: 'system', content: systemPrompt },
       {
@@ -604,13 +727,11 @@ async function callNvidiaImage(systemPrompt, userPrompt, base64Image, label) {
       },
     ],
     max_tokens: 2048,
-    reasoning_budget: 2048,
-    temperature: 0.85,
-    top_p: 0.95,
+    temperature: 0.7,
     stream: false,
   };
 
-  console.log(`[NVIDIA] ${label}...`);
+  console.log(`[NVIDIA-VISION] ${label}...`);
   const startTime = Date.now();
 
   const response = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
@@ -625,17 +746,117 @@ async function callNvidiaImage(systemPrompt, userPrompt, base64Image, label) {
 
   if (!response.ok) {
     const errBody = await response.text();
-    throw new Error(`NVIDIA API ${response.status}: ${errBody.substring(0, 300)}`);
+    throw new Error(`NVIDIA-VISION API ${response.status}: ${errBody.substring(0, 300)}`);
   }
 
   const data = await response.json();
-  console.log(`[NVIDIA] ${label} done in ${Date.now() - startTime}ms`);
+  console.log(`[NVIDIA-VISION] ${label} done in ${Date.now() - startTime}ms`);
 
   const content = data.choices?.[0]?.message?.content;
-  if (!content) throw new Error('No content in NVIDIA response');
+  if (!content) throw new Error('No content in NVIDIA-VISION response');
 
   const parsed = extractJSON(content);
-  if (!parsed) throw new Error('Could not parse JSON from NVIDIA response');
+  if (!parsed) throw new Error('Could not parse JSON from NVIDIA-VISION response');
+
+  return parsed;
+}
+
+// Optional direct/integrate NVIDIA style call (supports models like moonshotai/kimi-k3)
+async function callNvidiaStreamImage(systemPrompt, userPrompt, base64Image, label) {
+  const apiKey = process.env.NVIDIA_STREAM_KEY || process.env.NVIDIA_API_KEY;
+  if (!apiKey) throw new Error('NVIDIA_STREAM_KEY not set');
+
+  const imageUrl = base64Image.startsWith('data:') ? base64Image : `data:image/jpeg;base64,${base64Image}`;
+  const visionModel = process.env.NVIDIA_STREAM_MODEL || 'meta/llama-3.2-11b-vision-instruct';
+
+  const payload = {
+    model: visionModel,
+    messages: [
+      { role: 'system', content: systemPrompt },
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: userPrompt },
+          { type: 'image_url', image_url: { url: imageUrl } }
+        ]
+      }
+    ],
+    max_tokens: 2048,
+    temperature: 0.85,
+    stream: false
+  };
+
+  console.log(`[NVIDIA-STREAM-VISION (${visionModel})] ${label}...`);
+  const startTime = Date.now();
+
+  const response = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+      Accept: 'application/json'
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.ok) {
+    const errBody = await response.text();
+    throw new Error(`NVIDIA-STREAM API ${response.status}: ${errBody.substring(0, 300)}`);
+  }
+
+  const data = await response.json();
+  console.log(`[NVIDIA-STREAM-VISION] ${label} done in ${Date.now() - startTime}ms`);
+
+  const content = data.choices?.[0]?.message?.content;
+  if (!content) throw new Error('No content in NVIDIA-STREAM response');
+
+  const parsed = extractJSON(content);
+  if (!parsed) throw new Error('Could not parse JSON from NVIDIA-STREAM response');
+
+  return parsed;
+}
+
+async function callNvidiaStreamText(systemPrompt, userPrompt, label) {
+  const apiKey = process.env.NVIDIA_STREAM_KEY;
+  if (!apiKey) throw new Error('NVIDIA_STREAM_KEY not set');
+
+  const payload = {
+    model: process.env.NVIDIA_STREAM_MODEL || 'moonshotai/kimi-k3',
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt }
+    ],
+    max_tokens: 2048,
+    temperature: 0.85,
+    stream: false
+  };
+
+  console.log(`[NVIDIA-STREAM] ${label}...`);
+  const startTime = Date.now();
+
+  const response = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+      Accept: 'application/json'
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.ok) {
+    const errBody = await response.text();
+    throw new Error(`NVIDIA-STREAM API ${response.status}: ${errBody.substring(0, 300)}`);
+  }
+
+  const data = await response.json();
+  console.log(`[NVIDIA-STREAM] ${label} done in ${Date.now() - startTime}ms`);
+
+  const content = data.choices?.[0]?.message?.content;
+  if (!content) throw new Error('No content in NVIDIA-STREAM response');
+
+  const parsed = extractJSON(content);
+  if (!parsed) throw new Error('Could not parse JSON from NVIDIA-STREAM response');
 
   return parsed;
 }
@@ -646,14 +867,29 @@ async function callNvidiaBirth(base64Image) {
   return validateDNA(raw);
 }
 
+async function callNvidiaStreamBirth(base64Image) {
+  const raw = await callNvidiaStreamImage(COMEDY_SYSTEM_PROMPT, IMAGE_USER_PROMPT, base64Image, 'Birth (image)');
+  return validateDNA(raw);
+}
+
 async function callNvidiaManualBirth(objectName) {
   const raw = await callNvidiaText(COMEDY_SYSTEM_PROMPT, manualUserPrompt(objectName), `Birth (${objectName})`);
+  return validateDNA(raw);
+}
+
+async function callNvidiaStreamManualBirth(objectName) {
+  const raw = await callNvidiaStreamText(COMEDY_SYSTEM_PROMPT, manualUserPrompt(objectName), `Birth (${objectName})`);
   return validateDNA(raw);
 }
 
 // NVIDIA life script call
 async function callNvidiaLifeScript(dna) {
   const raw = await callNvidiaText(LIFE_SCRIPT_SYSTEM_PROMPT, lifeScriptUserPrompt(dna), `Life Script`);
+  return validateLifeScript(raw);
+}
+
+async function callNvidiaStreamLifeScript(dna) {
+  const raw = await callNvidiaStreamText(LIFE_SCRIPT_SYSTEM_PROMPT, lifeScriptUserPrompt(dna), `Life Script`);
   return validateLifeScript(raw);
 }
 

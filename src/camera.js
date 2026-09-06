@@ -22,14 +22,17 @@ export class Camera {
    */
   async start() {
     try {
-      this.stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: 'environment', // Prefer rear camera on mobile
-          width: { ideal: 1280 },
-          height: { ideal: 960 },
-        },
+      // Wrap getUserMedia in a timeout so it doesn't hang forever if permissions are ignored
+      const mediaPromise = navigator.mediaDevices.getUserMedia({
+        video: true,
         audio: false,
       });
+
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Camera permission or initialization timeout (8s)')), 8000);
+      });
+
+      this.stream = await Promise.race([mediaPromise, timeoutPromise]);
 
       this.videoEl.srcObject = this.stream;
 

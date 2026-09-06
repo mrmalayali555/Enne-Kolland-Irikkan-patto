@@ -130,30 +130,6 @@ export class UIRenderer {
     hint.textContent = 'Hold an object in front of the camera and press SCAN';
   }
 
-  /** Camera toggle UI */
-  enableCameraToggle() {
-    const btn = document.getElementById('camera-toggle');
-    if (!btn) return;
-    btn.style.display = 'inline-block';
-    btn.classList.remove('hidden');
-    btn.textContent = 'Start Camera';
-  }
-
-  setCameraToggleState(isRunning) {
-    const btn = document.getElementById('camera-toggle');
-    const hint = document.getElementById('camera-hint');
-    if (!btn) return;
-    if (isRunning) {
-      btn.textContent = 'Stop Camera';
-      btn.classList.add('active');
-      if (hint) hint.textContent = 'Camera active — hold an object and press SCAN';
-    } else {
-      btn.textContent = 'Start Camera';
-      btn.classList.remove('active');
-      if (hint) hint.textContent = 'Camera stopped — you can start it again or use Manual Entry';
-    }
-  }
-
   showCameraFailed() {
     const hint = document.getElementById('camera-hint');
     hint.textContent = 'Camera unavailable — switching to manual entry...';
@@ -555,7 +531,12 @@ export class UIRenderer {
     `;
 
     this.showScreen('death');
-    this.audio.play('death');
+    // Use AudioManager's dedicated death playback (idempotent)
+    if (this.audio && typeof this.audio.playDeathSound === 'function') {
+      this.audio.playDeathSound();
+    } else {
+      this.audio.play('death');
+    }
 
     // Animate entrance
     await this._delay(100);

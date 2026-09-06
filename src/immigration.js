@@ -1,10 +1,9 @@
 /**
- * immigration.js — Mini-game for airport immigration.
+ * immigration.js — Interactive Live Airport Immigration Mini-Game.
  *
- * Presents short officer prompts (4 questions), supports quick choices
- * and typed answers. Typed answers are sent to the server via
- * AIService. Returns a Promise that resolves to true (approved)
- * or false (rejected).
+ * Unlimited interactive chat with a rude, hilarious, suspicious Manglish officer.
+ * Handles continuous user messaging, AI responses, dynamic comedic challenges,
+ * and seamless passport stamping / continuation to the life simulator.
  */
 
 export class Immigration {
@@ -13,6 +12,7 @@ export class Immigration {
     this.ui = ui;
     this.gameState = gameState;
     this.audio = audio;
+    this._conversation = [];
     this.container = document.getElementById('screen-immigration');
     this.promptEl = document.getElementById('imm-officer-prompt');
     this.quickChoicesEl = document.getElementById('imm-quick-choices');
@@ -22,206 +22,328 @@ export class Immigration {
     this.speechEl = document.getElementById('imm-officer-speech');
     this.langSelect = document.getElementById('imm-lang-select');
     this.replyEl = document.getElementById('imm-reply');
-    this.appealsLeft = 1;
-    // Expand to 6 short Qs so player must answer multiple times (5-8 as requested)
-    this.questions = [
-      // Show passport thumbnail
-      this._renderPassportPreview();
+    
+    this.turnCount = 0;
+    this.isApproved = false;
+    this.isBusy = false;
+    this._resolveRun = null;
+    this._listenersBound = false;
+  }
 
-      // Collect answers for all questions (require completing sequence)
-      const answers = [];
-      for (let i = 0; i < this.questions.length; i++) {
-        const q = this.questions[i];
-        // set scenario based on question (fun visual)
-        this._setScenarioForQuestion(q);
-        const decision = await this._askQuestion(q, i + 1);
+  async run() {
+    this._showScreen();
+    this._renderPassportPreview();
 
-        // Retrieve last persisted answer (saved by _persistAnswer)
-        const cur = JSON.parse(localStorage.getItem('imm_answers_v1') || '[]');
-        const last = cur.length ? cur[cur.length - 1] : null;
-        const answerText = last ? (last.text || '') : '';
-        const replyText = this.speechEl ? this.speechEl.textContent : this.replyEl.textContent;
+    // Reset conversation state
+    this.turnCount = 0;
+    this.isApproved = false;
+    this.isBusy = false;
+    this._conversation = [];
 
-        answers.push({ question: q, answer: answerText, reply: replyText, decision });
-
-        // brief pacing before next question
-        await new Promise(r => setTimeout(r, 700));
-      }
-
-      // After all Qs, ask server for a final aggregated decision
-      this._showReply('Officer finalizing...');
-      try {
-        const res = await this.ai.immigrationQuery({ dna: this.gameState.objectDNA, answers, final: true });
-        if (res && res.decision === 'approve') return true;
-        return false;
-      } catch (err) {
-        console.error('[IMMIGRATION] final decision error', err);
-        return true; // fail-open
-      }
-            // After all Qs, ask server for a final aggregated decision
-            this._showReply('Officer finalizing...');
-            try {
-              const res = await this.ai.immigrationQuery({ dna: this.gameState.objectDNA, answers, final: true });
-              if (res && res.decision === 'approve') return true;
-              return false;
-            } catch (err) {
-              console.error('[IMMIGRATION] final decision error', err);
-              return true; // fail-open
-            }
-    this.replyEl.textContent = '';
-    this.inputEl.value = '';
-    this.quickChoicesEl.innerHTML = '';
-    // ensure language selector has a default
+    if (this.replyEl) this.replyEl.innerHTML = '';
+    if (this.quickChoicesEl) this.quickChoicesEl.innerHTML = '';
+    if (this.inputEl) {
+      this.inputEl.disabled = false;
+      this.inputEl.value = '';
+    }
+    if (this.submitBtn) this.submitBtn.disabled = false;
     if (this.langSelect && !this.langSelect.value) this.langSelect.value = 'manglish';
 
-    // Populate a few quick answers
-    const quicks = this._suggestedAnswersFor(question);
-    quicks.forEach(text => {
-      const btn = document.createElement('button');
-      btn.className = 'btn-quick';
-      btn.textContent = text;
-      btn.addEventListener('click', () => {
-        // optimistic UI: show quick answer, animate officer talking, and keep UI active
-        this.inputEl.value = text;
-        this._animateTalking(true);
-        this._showReply(`${text} `);
-        this._onAnswer(text);
-      });
-      this.quickChoicesEl.appendChild(btn);
+    const dna = this.gameState.objectDNA || {};
+    const name = dna.name || 'Unknown Object';
+    const type = dna.objectType || 'Object';
+
+    // Initial hilarious customized accusation based on object
+    const initialQuestion = this._getInitialQuestion(name, type);
+    this.promptEl.textContent = initialQuestion;
+    this.speechEl.textContent = initialQuestion;
+    this._setFace('stare');
+    this._addChatBubble('officer', initialQuestion);
+    this._conversation.push({ role: 'assistant', text: initialQuestion });
+
+    // Populate initial funny quick choices
+    this._renderQuickChoices(initialQuestion);
+
+    // Bind event listeners once
+    this._setupInputListeners();
+
+    // Focus input
+    setTimeout(() => {
+      try { this.inputEl.focus(); } catch (e) {}
+    }, 100);
+
+    return new Promise((resolve) => {
+      this._resolveRun = resolve;
+    });
+  }
+
+  _getInitialQuestion(name, type) {
+    const t = type.toLowerCase();
+    if (/banana|fruit|apple|mango|vegetable|food/i.test(t)) {
+      return `*slams table* "STOP RIGHT THERE! ${name} (${type})! You look suspiciously bright. PROVE YOU ARE NOT A 60W BULB spying for KSEB! Why you enter here?!"`;
+    }
+    if (/pen|pencil|marker|stationary/i.test(t)) {
+      return `*squints through magnifying glass* "${name} (${type})! Why is your nib pointed like a missile?! Are you planning ink terrorism?! State your business!"`;
+    }
+    if (/bottle|cup|glass|container/i.test(t)) {
+      return `*taps table* "Aha! ${name} (${type})! Are you smuggling contraband tap water?! Show me your ISI purity certificate immediately!"`;
+    }
+    if (/shoe|slipper|footwear/i.test(t)) {
+      return `*holds nose* "${name} (${type})! Suspicious biological aura detected! Prove you are not a bioweapon deployed from Dubai!"`;
+    }
+    return `*slams table* "HOI! ${name} (${type})! Why are you entering Republic of Objects?! Prove you are NOT a human in disguise!"`;
+  }
+
+  _setupInputListeners() {
+    if (this._listenersBound) return;
+    this._listenersBound = true;
+
+    // Submit button click handler
+    this.submitBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      this._handleUserSubmit();
     });
 
-    // Special interactive challenges if officer asks for proof
-    if (/Prove you are NOT/i.test(question) || /Prove you are NOT a human/i.test(question)) {
-      // add playful challenge buttons
-      const challenges = [
-        'Cluck like a hen 🐔',
-        'Show passport',
-        'Tell a Manglish joke',
-        'Make a weird noise'
-      ];
-      challenges.forEach(ch => {
-        const b = document.createElement('button');
-        b.className = 'btn-quick';
-        b.textContent = ch;
-        b.addEventListener('click', () => {
-          this.inputEl.value = ch;
-          this._animateTalking(true);
-          this._showReply(`${ch}`);
-          this._onAnswer(ch);
-        });
-        this.quickChoicesEl.appendChild(b);
-      });
-    }
+    // Enter key handler
+    this.inputEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        this._handleUserSubmit();
+      }
+    });
+  }
 
-    const answerPromise = new Promise((resolve) => {
-      const onSubmit = async () => {
-        const text = this.inputEl.value.trim();
-        if (!text) return;
-        // non-blocking: show thinking indicator but keep input usable
-        const prev = this.replyEl.textContent;
-        this._showReply('Officer is thinking...');
-        this._animateTalking(true);
+  async _handleUserSubmit() {
+    if (this.isBusy) return;
+    const text = this.inputEl.value.trim();
+    if (!text) return;
 
-        // include selected language in payload
-        const lang = this.langSelect ? this.langSelect.value : 'manglish';
-        const decision = await this._sendToAI(question, text, lang).catch(err => {
-          console.error(err);
-          return 'ask_more';
-        });
+    this.inputEl.value = '';
+    await this._processMessage(text);
+  }
 
-        // persist answer locally for introduction/session restore
-        try { this._persistAnswer({ question, text, lang, decision }); } catch {}
+  async _processMessage(userText) {
+    if (this.isBusy) return;
+    this.isBusy = true;
+    this.turnCount++;
 
-        // stop talking animation (AI reply already displayed by _sendToAI)
-        this._animateTalking(false);
-        resolve(decision);
+    // Lock UI
+    this.inputEl.disabled = true;
+    this.submitBtn.disabled = true;
+
+    // Add user bubble
+    this._addChatBubble('player', userText);
+    this._conversation.push({ role: 'user', text: userText });
+
+    // Show thinking bubble
+    const thinkingBubble = this._addChatBubble('officer', '🤔 Officer is interrogating...');
+    this._animateTalking(true);
+
+    // If it's an explicit bribe
+    const isBribe = /bribe|₹|rupee|cash|money|50|pay/i.test(userText);
+
+    const lang = this.langSelect ? this.langSelect.value : 'manglish';
+    const lastQuestion = this.promptEl.textContent;
+
+    let aiResult;
+    try {
+      const payload = {
+        dna: this.gameState.objectDNA,
+        question: lastQuestion,
+        answer: userText,
+        lang,
+        conversation: this._conversation.slice(-10),
       };
 
-      this.submitBtn.addEventListener('click', onSubmit, { once: true });
-      this.inputEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') onSubmit(); }, { once: false });
-
-      // quick choice resolution will call resolve directly via _onAnswer
-      this._resolveAnswer = resolve;
-    });
-
-    return answerPromise;
-  }
-
-  _onAnswer(text) {
-    // user clicked quick answer — send to AI and resolve
-    const q = this.promptEl ? this.promptEl.textContent : '';
-    const lang = this.langSelect ? this.langSelect.value : 'manglish';
-    this._sendToAI(q, text, lang).then(decision => {
-      try { this._persistAnswer({ question: q, text, lang, decision }); } catch (e) { /* ignore */ }
-      if (this._resolveAnswer) this._resolveAnswer(decision);
-    }).catch(err => {
-      console.error('[IMMIGRATION] quick answer error', err);
-      try { this._persistAnswer({ question: q, text, lang, decision: 'ask_more' }); } catch (e) {}
-      if (this._resolveAnswer) this._resolveAnswer('ask_more');
-    });
-  }
-
-  _suggestedAnswersFor(question) {
-    // Use Manglish-flavored quick answers
-    if (/enter/i.test(question) || /enter here/i.test(question) || /Why you enter/i.test(question)) {
-      return ['Holiday aanu', 'Work aanu bro', 'Owner visit aanu', 'Ketta mistake ayi'];
-    }
-    if (/Who is your owner/i.test(question) || /Who owns/i.test(question)) {
-      return ['Appu aanu', 'Owner: Ammachi', 'Njan oru product, no owner', 'Family item'];
-    }
-    if (/What do you do|occupation|work/i.test(question)) {
-      return ['For sale', 'Edible aanu', 'Personal item', 'Tool — help cheyyum'];
-    }
-    if (/NOT a human|NOT a human|Prove you are NOT/i.test(question)) {
-      return ['Njan breath illa, fruit aanu', 'Metal aanu, bones illa', 'Njan innu party-il undayirunnu', 'Ithoru prop aanu'];
-    }
-    return ['I am harmless', 'I prefer not to answer'];
-  }
-
-  async _sendToAI(question, answer, lang = 'manglish') {
-    // show a polite thinking message (non-blocking)
-    this._showReply('Officer is thinking...');
-    const payload = { dna: this.gameState.objectDNA, question, answer, lang };
-
-    // timeout wrapper — fail-open after 8s but keep UI responsive
-    const timeoutMs = 8000;
-    const timer = new Promise((resolve) => setTimeout(() => resolve({ _timedOut: true }), timeoutMs));
-
-    try {
-      const res = await Promise.race([this.ai.immigrationQuery(payload), timer]);
-      if (res && res._timedOut) {
-        this._showReply('Officer is taking a looong time... try Manglish or pick a quick option.');
-        this._animateTalking(false);
-        this._setFace('doubt');
-        return 'ask_more';
-      }
-      if (!res) {
-        this._animateTalking(false);
-        this._setFace('doubt');
-        return 'ask_more';
-      }
-      if (res.reply) {
-        this._showReply(res.reply);
-        this.speechEl.textContent = res.reply;
-      }
-      if (res.decision) {
-        // set face based on decision
-        if (res.decision === 'approve') this._setFace('happy');
-        else if (res.decision === 'reject') this._setFace('stare');
-        else this._setFace('doubt');
-        this._animateTalking(false);
-        return res.decision;
-      }
-      this._animateTalking(false);
-      this._setFace('doubt');
-      return 'ask_more';
+      aiResult = await Promise.race([
+        this.ai.immigrationQuery(payload),
+        new Promise((r) => setTimeout(() => r(null), 12000)),
+      ]);
     } catch (err) {
-      console.error('[IMMIGRATION] AI error', err);
-      this._showReply('System is busy. Officer waves you through.');
-      this._animateTalking(false);
-      this._setFace('happy');
-      return 'approve'; // fail-open
+      console.error('[IMMIGRATION ERROR]', err);
     }
+
+    // Remove thinking indicator
+    if (thinkingBubble && thinkingBubble.parentNode) {
+      thinkingBubble.remove();
+    }
+    this._animateTalking(false);
+
+    let officerReply = '';
+    let decision = 'ask_more';
+
+    if (aiResult && aiResult.reply) {
+      officerReply = aiResult.reply;
+      decision = aiResult.decision || 'ask_more';
+    } else {
+      // Hilarious local fallback if AI is slow
+      const fallback = this._getLocalRoast(userText, isBribe);
+      officerReply = fallback.reply;
+      decision = fallback.decision;
+    }
+
+    // Handle bribe override for comedy
+    if (isBribe) {
+      officerReply = `*looks left and right* "Aha! ₹50 bribe?! ...I am an honest officer! *quietly pockets ₹50* ...Okay, tea charge accepted! APPROVED!"`;
+      decision = 'approve';
+    } else if (this.turnCount >= 4 && decision !== 'approve') {
+      // Guarantee approval after 4 turns so player never gets stuck indefinitely
+      officerReply += ' *stamps desk* "Enikku vere paniyundu! Approved! Kadannu po!"';
+      decision = 'approve';
+    }
+
+    // Update officer dialogue
+    this.speechEl.textContent = officerReply;
+    this.promptEl.textContent = officerReply;
+    this._addChatBubble('officer', officerReply);
+    this._conversation.push({ role: 'assistant', text: officerReply });
+
+    // Reaction face
+    if (decision === 'approve') {
+      this._setFace('happy');
+      this.isApproved = true;
+      this._showApprovalContinueButton();
+      try { this.audio?.play('stamp'); } catch (e) {}
+    } else if (decision === 'reject') {
+      this._setFace('stare');
+    } else {
+      this._setFace('doubt');
+    }
+
+    // Update dynamic quick choices for next turn
+    this._renderQuickChoices(officerReply);
+
+    // Re-enable input for unlimited chatting!
+    this.isBusy = false;
+    this.inputEl.disabled = false;
+    this.submitBtn.disabled = false;
+    try { this.inputEl.focus(); } catch (e) {}
+  }
+
+  _getLocalRoast(text, isBribe) {
+    const dna = this.gameState.objectDNA || {};
+    const name = dna.name || 'Itthu';
+    const type = dna.objectType || 'Object';
+
+    if (isBribe) {
+      return {
+        reply: `*slams desk* "BRIBE?! ₹50 mathramo?! ...wait, ₹50 is acceptable. *pockets cash* APPROVED!"`,
+        decision: 'approve',
+      };
+    }
+
+    const roasts = [
+      { reply: `"${text}" ennano?! *slams table* Ith border checkpost aanu mwone, comedy club alla! Prove your identity!`, decision: 'ask_more' },
+      { reply: `Aiyo ${name}, your explanation has 0% logic and 100% drama! Sing your serial number in Carnatic raga or get out!`, decision: 'ask_more' },
+      { reply: `*squints suspiciously* A ${type} that talks like this is either a genius or an undercover spy! Tell me your owner's horoscope!`, decision: 'ask_more' },
+      { reply: `Officer: "Hmm... '${text}'. Very suspicious answer. Prove you cannot emit 1000 lumens right now!"`, decision: 'ask_more' },
+      { reply: `*picks up phone* "Security, get ready..." *looks at ${name}* "...actually you are too funny. STAMPED! APPROVED!"`, decision: 'approve' },
+      { reply: `*checks passport* "Everything matches. Except your face. But whatever, APPROVED! Kadannu po!"`, decision: 'approve' },
+    ];
+
+    return roasts[Math.floor(Math.random() * roasts.length)];
+  }
+
+  _showApprovalContinueButton() {
+    // Keep quick choices container clean and show glowing continue button
+    let existingBtn = document.getElementById('imm-continue-active-btn');
+    if (!existingBtn) {
+      const contWrapper = document.createElement('div');
+      contWrapper.className = 'imm-continue-wrapper';
+      contWrapper.style.cssText = 'width: 100%; margin: 10px 0; text-align: center;';
+
+      const btn = document.createElement('button');
+      btn.id = 'imm-continue-active-btn';
+      btn.className = 'btn-begin-life reveal';
+      btn.style.cssText = 'padding: 14px 28px; font-size: 1.1rem; font-weight: 800; background: linear-gradient(135deg, #00ff88, #00b894); color: #07070d; border: none; border-radius: 8px; cursor: pointer; box-shadow: 0 0 25px rgba(0,255,136,0.6); animation: pulse 1.5s infinite;';
+      btn.textContent = '✅ PASSPORT APPROVED — ENTER WORLD (CONTINUE) ➔';
+
+      btn.addEventListener('click', () => {
+        if (this._resolveRun) {
+          this._resolveRun(true);
+        }
+      });
+
+      contWrapper.appendChild(btn);
+      this.quickChoicesEl.prepend(contWrapper);
+    }
+  }
+
+  _renderQuickChoices(lastReply) {
+    // Preserve the continue button if already approved
+    const existingCont = document.getElementById('imm-continue-active-btn');
+    this.quickChoicesEl.innerHTML = '';
+    if (existingCont) {
+      const contWrapper = document.createElement('div');
+      contWrapper.className = 'imm-continue-wrapper';
+      contWrapper.style.cssText = 'width: 100%; margin: 10px 0; text-align: center;';
+      contWrapper.appendChild(existingCont);
+      this.quickChoicesEl.appendChild(contWrapper);
+    }
+
+    const dna = this.gameState.objectDNA || {};
+    const type = (dna.objectType || '').toLowerCase();
+
+    // Dynamic contextual funny answers
+    let options = [
+      'Njan harmless aanu bro!',
+      'Ithil ₹50 edukko? (Bribe)',
+      'Ask the banana witness!',
+      'Njan bulb alla, switch off cheyyano?!',
+      'Officer pwoli aanu, vidu please!',
+    ];
+
+    if (/bulb|lumens/i.test(lastReply)) {
+      options = [
+        'Njan bulb alla, zero watts aanu!',
+        'KSEB-il njan allada!',
+        'Switch on cheythu nokk, light varilla!',
+        'Ithil ₹50 edukko? (Bribe)',
+      ];
+    } else if (/owner|horoscope|jathakam/i.test(lastReply)) {
+      options = [
+        'Owner Appu aanu, star Rohini!',
+        'Jathakam shari illa, but passport real aanu!',
+        'Owner Dubai-il aanu bro!',
+        'Ithil ₹50 edukko? (Bribe)',
+      ];
+    } else if (/serial|carnatic|sing/i.test(lastReply)) {
+      options = [
+        '🎵 Sa Re Ga Ma Pa Da Ni Sa (Serial #4092)!',
+        'Enikku paadaan ariyilla mwone!',
+        'Barcode scan cheyy bro!',
+        'Ithil ₹50 edukko? (Bribe)',
+      ];
+    }
+
+    const btnContainer = document.createElement('div');
+    btnContainer.className = 'imm-quick-btns-row';
+    btnContainer.style.cssText = 'display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 6px;';
+
+    options.forEach((optText) => {
+      const btn = document.createElement('button');
+      btn.className = 'btn-quick';
+      btn.textContent = optText;
+      btn.addEventListener('click', () => {
+        this.inputEl.value = optText;
+        this._handleUserSubmit();
+      });
+      btnContainer.appendChild(btn);
+    });
+
+    this.quickChoicesEl.appendChild(btnContainer);
+  }
+
+  _renderPassportPreview() {
+    const preview = document.getElementById('imm-passport-preview');
+    if (!preview) return;
+    const dna = this.gameState.objectDNA || {};
+    preview.innerHTML = `
+      <div class="imm-pass-small">
+        <div class="imm-pass-name">${dna.name || 'UNKNOWN'}</div>
+        <div class="imm-pass-type">${dna.objectType || 'Object'} • ${dna.passportNumber || 'OBJ-00000'}</div>
+      </div>
+    `;
   }
 
   _setFace(kind) {
@@ -231,40 +353,30 @@ export class Immigration {
     else this.faceEl.src = '/stare.png';
   }
 
+  _addChatBubble(who, text) {
+    const reply = document.getElementById('imm-reply');
+    if (!reply) return null;
+    const div = document.createElement('div');
+    div.className = `imm-bubble ${who}`;
+    div.textContent = text;
+    reply.appendChild(div);
+    reply.scrollTop = reply.scrollHeight;
+    return div;
+  }
+
   _animateTalking(on = true) {
     if (!this.container) return;
     const el = this.container.querySelector('.imm-officer-visual');
     if (!el) return;
-    if (on) el.classList.add('talking'); else el.classList.remove('talking');
-  }
-
-  _setScenarioForQuestion(question) {
-    // Add a small scene class to the immigration screen for flavor
-    const root = document.getElementById('screen-immigration');
-    root.classList.remove('scenario-stare', 'scenario-happy', 'scenario-doubt');
-    if (/Prove you are NOT/i.test(question)) root.classList.add('scenario-doubt');
-    else if (/Why you enter/i.test(question)) root.classList.add('scenario-stare');
-    else root.classList.add('scenario-happy');
-  }
-
-  _persistAnswer(entry) {
-    const key = 'imm_answers_v1';
-    const cur = JSON.parse(localStorage.getItem(key) || '[]');
-    cur.push(Object.assign({ ts: Date.now() }, entry));
-    localStorage.setItem(key, JSON.stringify(cur.slice(-50))); // keep last 50
-  }
-
-  _showReply(text) {
-    this.replyEl.textContent = text;
+    if (on) el.classList.add('talking');
+    else el.classList.remove('talking');
   }
 
   _showScreen() {
-    // Use ui's showScreen if available
     if (this.ui && typeof this.ui.showScreen === 'function') {
       this.ui.showScreen('immigration');
     } else {
-      // otherwise toggle directly
-      document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+      document.querySelectorAll('.screen').forEach((s) => s.classList.remove('active'));
       this.container.classList.add('active');
     }
   }

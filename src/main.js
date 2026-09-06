@@ -18,6 +18,7 @@ import { Immigration } from './immigration.js';
 import { World } from './world.js';
 import { Shop } from './shop.js';
 import { VideoManager } from './video-manager.js';
+import { GameIntro } from './intro.js';
 
 class App {
   constructor() {
@@ -38,14 +39,13 @@ class App {
     this.ui = new UIRenderer(this.audio);
     // Video manager
     this.videoManager = new VideoManager(this.ai, this.ui);
+    // Intro sequence
+    this.intro = new GameIntro(this.ui, this.audio);
+    // Run intro (await so we start after it completes or is skipped)
+    try { await this.intro.run(); } catch (e) { /* ignore */ }
 
     // Try to start camera
-    // Enable camera toggle UI and bind controls
-    this.ui.enableCameraToggle();
-    this._bindCameraToggle();
-
     const cameraOk = await this.camera.start();
-    this.ui.setCameraToggleState(!!cameraOk);
 
     if (cameraOk) {
       this.ui.enableScanButton();
@@ -67,35 +67,6 @@ class App {
   _bindScanButton() {
     const btn = document.getElementById('scan-btn');
     btn.addEventListener('click', () => this._onScan());
-  }
-
-  _bindCameraToggle() {
-    const btn = document.getElementById('camera-toggle');
-    if (!btn) return;
-    btn.addEventListener('click', async () => {
-      // If camera running, stop it; otherwise start
-      if (this.camera && this.camera.isReady) {
-        try {
-          this.camera.stop();
-          this.ui.setCameraToggleState(false);
-          const scanBtn = document.getElementById('scan-btn'); if (scanBtn) scanBtn.disabled = true;
-        } catch (e) { console.error('[CAM TOGGLE] stop error', e); }
-        return;
-      }
-
-      // Start camera
-      try {
-        const ok = await this.camera.start();
-        this.ui.setCameraToggleState(!!ok);
-        if (ok) {
-          this.ui.enableScanButton();
-          this._bindScanButton();
-        }
-      } catch (e) {
-        console.error('[CAM TOGGLE] start error', e);
-        this.ui.showCameraFailed();
-      }
-    });
   }
 
   async _onScan() {
@@ -131,6 +102,8 @@ class App {
 
     // 5. Initialize game state
     this.gameState.initFromBirth(dna, imageData);
+    // Reset death sound flag for new life
+    if (this.audio && typeof this.audio.resetDeathFlag === 'function') this.audio.resetDeathFlag();
 
     // 5.5 Start background life script generation
     this.ai.generateLifeScript(dna)
@@ -182,6 +155,7 @@ class App {
 
       // Initialize state (no image)
       this.gameState.initFromBirth(dna, null);
+      if (this.audio && typeof this.audio.resetDeathFlag === 'function') this.audio.resetDeathFlag();
 
       // Start background life script generation
       this.ai.generateLifeScript(dna)
@@ -242,9 +216,38 @@ class App {
 
   async _runLifeLoop() {
     try {
-      // Wait for background script to finish generating
-      while (!this.gameState.lifeScript) {
-        await this._delay(500);
+      // Show a loading screen while waiting for the life script
+      if (!this.gameState.lifeScript) {
+        this.ui.showScreen('scanning');
+        const scanText = document.getElementById('scanning-text');
+        const scanBar = document.getElementById('scanning-bar-fill');
+        const objectName = this.gameState.objectDNA?.name || 'Object';
+        
+        const loadingMessages = [
+          `${objectName}-nte destiny ezhuthunnu...`,
+          `Life chapters generate cheyyunnu...`,
+          `Dramatic twists add cheyyunnu...`,
+          `Death scene prepare cheyyunnu... 💀`,
+          `Almost ready... patience mwone!`,
+        ];
+        
+        let progress = 0;
+        let msgIdx = 0;
+        
+        while (!this.gameState.lifeScript) {
+          progress = Math.min(95, progress + Math.random() * 12 + 3);
+          if (scanBar) scanBar.style.width = `${progress}%`;
+          if (scanText) {
+            scanText.innerHTML = `${loadingMessages[msgIdx]}<br><span style="font-size:0.8em;color:#00ff88;">${Math.round(progress)}% complete</span>`;
+          }
+          msgIdx = (msgIdx + 1) % loadingMessages.length;
+          await this._delay(800);
+        }
+        
+        // Script is ready!
+        if (scanBar) scanBar.style.width = '100%';
+        if (scanText) scanText.innerHTML = `✅ ${objectName}-nte life READY!<br><span style="font-size:0.8em;color:#00ff88;">100% — LET'S GO!</span>`;
+        await this._delay(600);
       }
 
       // Loop: pull pre-generated encounters for chapters 1-4
@@ -310,6 +313,8 @@ class App {
       await new Promise(resolve => {
         viewBtn.addEventListener('click', () => {
           this.audio.play('click');
+          // Play life-summary tune (lst.mp3) if available
+          try { if (this.audio && typeof this.audio.play === 'function') this.audio.play('lst'); } catch(e){}
           resolve();
         }, { once: true });
       });

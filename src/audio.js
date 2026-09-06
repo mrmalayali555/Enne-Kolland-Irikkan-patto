@@ -32,6 +32,11 @@ export class AudioManager {
       reveal: '/sounds/reveal.mp3',
       click: '/sounds/click.mp3',
       death: '/sounds/death.mp3',
+      // Project-provided assets (preferred location)
+      v: '/assets/audio/v.mp3',
+      chath: '/assets/audio/chath.mp3',
+      // life-summary tune (project root fallback)
+      lst: '/lst.mp3',
     };
 
     const loadPromises = Object.entries(soundMap).map(async ([name, path]) => {
@@ -55,6 +60,40 @@ export class AudioManager {
 
     const loaded = Object.keys(this.sounds);
     console.log(`[AUDIO] Loaded ${loaded.length} sounds:`, loaded);
+  }
+
+  /**
+   * Play the supplied intro voice 'v' if loaded.
+   */
+  playIntroVoice() {
+    if (this.isMuted) return null;
+    const a = this.sounds.v;
+    if (!a) return null;
+    const clone = a.cloneNode();
+    clone.play().catch(() => {});
+    return clone;
+  }
+
+  /**
+   * Play the chath death sound exactly once per invocation.
+   * Prevents duplicate replay during repeated renders.
+   */
+  playDeathSound() {
+    if (this.isMuted) return;
+    if (this._deathPlaying) return; // already playing
+    const a = this.sounds.chath || this.sounds.death;
+    if (!a) return;
+    this._deathPlaying = true;
+    const clone = a.cloneNode();
+    clone.addEventListener('ended', () => { this._deathPlaying = false; });
+    clone.play().catch(() => { this._deathPlaying = false; });
+  }
+
+  /**
+   * Reset death-play flag (call when starting a new life/game)
+   */
+  resetDeathFlag() {
+    this._deathPlaying = false;
   }
 
   /**
