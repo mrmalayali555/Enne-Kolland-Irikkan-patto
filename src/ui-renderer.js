@@ -181,7 +181,104 @@ export class UIRenderer {
     bar.style.width = '100%';
   }
 
-  // ─── Passport Birth Reveal ──────────────────────────────────────
+  /**
+   * Show a Scanner Report card when AI confidence is too low.
+   * @param {string[]} candidates - Top object candidates from consensus
+   * @param {number} confidence - 0–1 score
+   * @param {Function} onRescan - callback when user hits "Scan Again"
+   * @param {Function} onType - callback(typedName) when user submits a name
+   */
+  showScannerReport(candidates, confidence, onRescan, onType) {
+    const confPct = Math.round(confidence * 100);
+
+    // Remove any existing report
+    document.getElementById('scanner-report-overlay')?.remove();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'scanner-report-overlay';
+    overlay.className = 'scanner-report-overlay';
+
+    const candidatesHtml = candidates.length
+      ? candidates.map((c, i) => `
+          <div class="sr-candidate ${i === 0 ? 'sr-top' : ''}">
+            <span class="sr-rank">#${i + 1}</span>
+            <span class="sr-name">${c.toUpperCase()}</span>
+            ${i === 0 ? '<span class="sr-badge">MOST LIKELY</span>' : ''}
+          </div>`).join('')
+      : '<div class="sr-candidate">No candidates detected</div>';
+
+    overlay.innerHTML = `
+      <div class="scanner-report-card">
+        <div class="sr-header">
+          <span class="sr-icon">🔍</span>
+          <h2 class="sr-title">SCANNER REPORT</h2>
+          <div class="sr-subtitle">AI could not identify the object clearly</div>
+        </div>
+
+        <div class="sr-confidence-section">
+          <div class="sr-conf-label">CONFIDENCE</div>
+          <div class="sr-conf-bar-bg">
+            <div class="sr-conf-bar-fill ${confPct >= 40 ? 'medium' : 'low'}"
+                 style="width: ${Math.max(confPct, 4)}%"></div>
+          </div>
+          <div class="sr-conf-pct">${confPct}%</div>
+        </div>
+
+        <div class="sr-candidates-section">
+          <div class="sr-cand-label">TOP CANDIDATES</div>
+          ${candidatesHtml}
+        </div>
+
+        <div class="sr-hint">
+          💡 Hold the object CLOSER and re-scan, OR type its name below
+        </div>
+
+        <div class="sr-type-section">
+          <input id="sr-type-input" class="sr-type-input" type="text"
+                 placeholder="Type object name..." autocomplete="off" />
+        </div>
+
+        <div class="sr-actions">
+          <button id="sr-rescan-btn" class="sr-btn sr-btn-primary">
+            📷 SCAN AGAIN
+          </button>
+          <button id="sr-type-btn" class="sr-btn sr-btn-secondary">
+            ✏️ USE NAME
+          </button>
+        </div>
+      </div>
+    `;
+
+    // Mount over the scanning screen
+    const scanningScreen = document.getElementById('screen-scanning');
+    scanningScreen.appendChild(overlay);
+
+    // Animate in
+    requestAnimationFrame(() => overlay.classList.add('visible'));
+
+    // Wire up buttons
+    document.getElementById('sr-rescan-btn').addEventListener('click', () => {
+      overlay.remove();
+      onRescan();
+    });
+
+    document.getElementById('sr-type-btn').addEventListener('click', () => {
+      const name = document.getElementById('sr-type-input').value.trim();
+      if (!name) {
+        document.getElementById('sr-type-input').classList.add('shake');
+        setTimeout(() => document.getElementById('sr-type-input')?.classList.remove('shake'), 500);
+        return;
+      }
+      overlay.remove();
+      onType(name);
+    });
+
+    document.getElementById('sr-type-input').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') document.getElementById('sr-type-btn').click();
+    });
+  }
+
+
 
   /**
    * Show the passport with pass.png background and overlaid data.

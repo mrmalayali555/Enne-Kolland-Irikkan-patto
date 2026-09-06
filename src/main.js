@@ -73,55 +73,90 @@ class App {
     const btn = document.getElementById('scan-btn');
     btn.disabled = true;
 
-    // 1. Capture frame
-    const imageData = this.camera.capture();
-    if (!imageData) {
-      console.error('[SCAN] Failed to capture frame');
+    // 1. Capture FIRST frame immediately for the preview image
+    const previewFrame = this.camera.capture();
+    if (!previewFrame) {
+      console.error('[SCAN] Failed to capture preview frame');
       btn.disabled = false;
       return;
     }
 
-    // 2. Show scanning animation with captured image
-    this.ui.showScanning(imageData);
+    // 2. Show scanning animation with the preview image
+    this.ui.showScanning(previewFrame);
     this.audio.play('scan');
 
-    // 3. Call AI for birth (with timeout + fallback)
-    let dna;
+    // 3. Capture remaining frames in background (2 more @ 500ms apart)
+    //    Frame 1 was already captured as previewFrame
+    this.ui.updateScanningText('CAPTURING FRAME 1 / 3…');
+    const extraFrames = await this.camera.captureFrames(2, 600);
+    const allFrames = [previewFrame, ...extraFrames];
+
+    this.ui.updateScanningText(`CAPTURED ${allFrames.length} FRAMES — ANALYZING…`);
+    await this._delay(300);
+
+    // 4. Run multi-frame consensus AI call
+    let result;
     try {
-      dna = await this._callBirthWithTimeout(imageData, 45000);
+      result = await this._callConsensusWithTimeout(allFrames, 60000);
     } catch (err) {
-      console.warn('[SCAN] AI birth failed, using fallback:', err.message);
-      this.ui.updateScanningText('USING BACKUP RECORDS...');
-      await this._delay(800);
-      dna = getFallbackDNA('');
+      console.warn('[SCAN] Consensus AI failed, using fallback:', err.message);
+      result = { dna: getFallbackDNA(''), confidence: 0, candidates: [], needsRescan: false };
     }
 
-    // 4. Update scanning text
-    this.ui.updateScanningText(`★ ${dna.name.toUpperCase()} IDENTIFIED ★`);
-    await this._delay(600);
+    const { dna, confidence, candidates, needsRescan } = result;
 
-    // 5. Initialize game state
+    // 5. Handle confidence levels
+    if (needsRescan || confidence < 0.40) {
+      // LOW CONFIDENCE — show scanner report
+      this.ui.showScannerReport(candidates, confidence, () => {
+        // Retry scan
+        btn.disabled = false;
+        this.ui.showScreen('scan');
+      }, async (typedName) => {
+        // User typed a name manually
+        btn.disabled = true;
+        this.ui.showScreen('scanning');
+        this.ui.updateScanningText(`GENERATING FOR: ${typedName.toUpperCase()}…`);
+        let manualDna;
+        try {
+          manualDna = await this._callManualBirthWithTimeout(typedName, 45000);
+        } catch {
+          manualDna = getFallbackDNA(typedName);
+        }
+        await this._completeScan(manualDna, previewFrame);
+      });
+      return;
+    }
+
+    // 6. HIGH/MEDIUM confidence — proceed normally
+    const confPct = Math.round(confidence * 100);
+    const confEmoji = confidence >= 0.75 ? '✅' : '⚠️';
+    this.ui.updateScanningText(`${confEmoji} ${dna.name.toUpperCase()} IDENTIFIED (${confPct}% match)`);
+    await this._delay(600);
+    await this._completeScan(dna, previewFrame);
+  }
+
+  /** Shared completion logic after object is identified */
+  async _completeScan(dna, imageData) {
+    // Initialize game state
     this.gameState.initFromBirth(dna, imageData);
-    // Reset death sound flag for new life
     if (this.audio && typeof this.audio.resetDeathFlag === 'function') this.audio.resetDeathFlag();
 
-    // 5.5 Start background life script generation
+    // Start background life script generation
     this.ai.generateLifeScript(dna)
       .then(script => {
         console.log('[APP] Pre-generated life script ready');
         this.gameState.setLifeScript(script);
       })
-      .catch(err => {
-        console.error('[APP] Pre-generated life script failed', err);
-      });
+      .catch(err => console.error('[APP] Pre-generated life script failed', err));
 
-    // 6. Stop camera (free resources)
+    // Stop camera (free resources)
     this.camera.stop();
 
-    // 7. Show birth/passport reveal
+    // Show birth/passport reveal
     await this.ui.showBirthReveal(dna, imageData);
 
-    // 8. Bind the "Begin Life" button (will be used in Milestone 2)
+    // Bind the "Begin Life" button
     this._bindBeginLife();
   }
 
@@ -368,11 +403,12 @@ class App {
   // ─── AI Call Helpers ────────────────────────────────────────────
 
   /**
-   * Call AI birth with a timeout. Falls back on timeout.
+   * Run multi-frame consensus with timeout.
+   * Returns the full {dna, confidence, candidates, needsRescan} result.
    */
-  async _callBirthWithTimeout(imageData, timeoutMs) {
+  async _callConsensusWithTimeout(frames, timeoutMs) {
     return Promise.race([
-      this.ai.detectAndBirth(imageData),
+      this.ai.detectAndBirth(frames),
       new Promise((_, reject) =>
         setTimeout(() => reject(new Error('AI timeout')), timeoutMs)
       ),

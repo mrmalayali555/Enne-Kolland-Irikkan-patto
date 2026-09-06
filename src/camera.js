@@ -100,6 +100,23 @@ export class Camera {
   }
 
   /**
+   * Capture multiple frames over time for consensus scanning.
+   * @param {number} count - Number of frames (default 3)
+   * @param {number} intervalMs - Delay between frames in ms (default 500)
+   * @returns {Promise<string[]>} Array of base64 data URIs
+   */
+  async captureFrames(count = 3, intervalMs = 500) {
+    const frames = [];
+    for (let i = 0; i < count; i++) {
+      if (i > 0) await new Promise(r => setTimeout(r, intervalMs));
+      const frame = this.capture();
+      if (frame) frames.push(frame);
+    }
+    console.log(`[CAMERA] Captured ${frames.length}/${count} frames`);
+    return frames;
+  }
+
+  /**
    * Stop the webcam stream and release resources.
    */
   stop() {

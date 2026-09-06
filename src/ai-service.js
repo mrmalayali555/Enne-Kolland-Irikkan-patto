@@ -18,12 +18,36 @@ export class AIService {
   // ─── Birth (Milestone 1) ────────────────────────────────────────
 
   /**
-   * Send captured image to the server for object detection + DNA generation.
-   * @param {string} imageBase64 - Base64 data URI of the captured frame
-   * @returns {Promise<Object>} The generated Object DNA
+   * Send captured frames to the server for multi-frame consensus detection + DNA generation.
+   * @param {string[]} frames - Array of base64 data URIs (1–3 frames)
+   * @returns {Promise<{dna, confidence, candidates, needsRescan}>}
    */
-  async detectAndBirth(imageBase64) {
-    return this._post('/birth', { image: imageBase64 }, 'dna');
+  async detectAndBirth(frames) {
+    const payload = Array.isArray(frames)
+      ? { frames }
+      : { image: frames };                   // legacy single-image fallback
+
+    const response = await fetch(`${this.baseUrl}/birth`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({ error: 'Unknown error' }));
+      throw new Error(err.error || `Server error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    if (!data.success) throw new Error('Birth API returned failure');
+
+    // Return full result so main.js can handle confidence gating
+    return {
+      dna: data.dna || null,
+      confidence: data.confidence ?? 1.0,
+      candidates: data.candidates || [],
+      needsRescan: data.needsRescan ?? false,
+    };
   }
 
   /**

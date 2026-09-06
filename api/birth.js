@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { raceBirth, raceManualBirth } from '../server.js';
+import { consensusBirth, raceManualBirth } from '../server.js';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -14,34 +14,67 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { image, manualName } = req.body || {};
+  const { image, frames, manualName } = req.body || {};
 
-  if (!image && !manualName) {
-    return res.status(400).json({ error: 'No image or object name provided' });
+  if (!image && !frames && !manualName) {
+    return res.status(400).json({ error: 'No image, frames or object name provided' });
   }
 
   try {
-    let dna;
-    if (image) {
+    // ── Multi-frame consensus path ───────────────────────────────
+    if (frames && Array.isArray(frames) && frames.length > 0) {
+      let result;
       try {
-        dna = await raceBirth(image);
-      } catch (raceErr) {
-        console.warn('[API/BIRTH] AI Vision failed or rate-limited, generating smart passport fallback:', raceErr.message);
-        dna = generateSmartPassport(manualName || 'Mystery Object');
+        result = await consensusBirth(frames);
+      } catch (consensusErr) {
+        console.warn('[API/BIRTH] Consensus failed, using smart fallback:', consensusErr.message);
+        result = {
+          dna: generateSmartPassport('Mystery Object'),
+          confidence: 0.0,
+          candidates: [],
+          needsRescan: false,
+        };
       }
-    } else {
-      try {
-        dna = await raceManualBirth(manualName);
-      } catch (raceErr) {
-        console.warn('[API/BIRTH] Manual AI failed, generating smart passport fallback:', raceErr.message);
-        dna = generateSmartPassport(manualName);
-      }
+      return res.json({ success: true, ...result });
     }
-    return res.json({ success: true, dna });
+
+    // ── Legacy single-image path (treated as 1-frame consensus) ──
+    if (image) {
+      let result;
+      try {
+        result = await consensusBirth([image]);
+      } catch (err) {
+        console.warn('[API/BIRTH] Single-frame consensus failed, using fallback:', err.message);
+        result = {
+          dna: generateSmartPassport('Mystery Object'),
+          confidence: 0.0,
+          candidates: [],
+          needsRescan: false,
+        };
+      }
+      return res.json({ success: true, ...result });
+    }
+
+    // ── Manual name path ─────────────────────────────────────────
+    let dna;
+    try {
+      dna = await raceManualBirth(manualName);
+    } catch (raceErr) {
+      console.warn('[API/BIRTH] Manual AI failed, using fallback:', raceErr.message);
+      dna = generateSmartPassport(manualName);
+    }
+    return res.json({
+      success: true,
+      dna,
+      confidence: 1.0,
+      candidates: [manualName],
+      needsRescan: false,
+    });
+
   } catch (err) {
     console.error('[API/BIRTH ERROR]', err.message);
     const dna = generateSmartPassport(manualName || 'Object');
-    return res.json({ success: true, dna });
+    return res.json({ success: true, dna, confidence: 0.0, candidates: [], needsRescan: false });
   }
 }
 

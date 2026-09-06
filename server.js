@@ -296,6 +296,113 @@ async function raceBirth(base64Image) {
   try { return await Promise.any(promises); } catch (aggErr) { throw new Error(`All AIs failed: ${aggErr.message}`); }
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// CONSENSUS SCANNER: 3-frame × multi-model → agreement engine
+// ═══════════════════════════════════════════════════════════════════
+
+/**
+ * Normalise object label to lowercase for candidate grouping.
+ * 'Ballpoint Pen', 'pen', 'a ballpoint pen' → 'pen'
+ */
+function normalizeObjectName(raw) {
+  if (!raw) return '';
+  return raw
+    .toLowerCase()
+    .replace(/^(a|an|the)\s+/, '')          // strip articles
+    .replace(/\s*\(.*?\)\s*/g, '')           // strip parenthetical
+    .replace(/[^a-z0-9 ]/g, '')              // remove punctuation
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
+/**
+ * Multi-frame consensus birth.
+ * @param {string[]} frames - Array of base64 data URIs (1–3)
+ * @returns {Promise<{dna, confidence, candidates, needsRescan}>}
+ */
+export async function consensusBirth(frames) {
+  // ── Phase 1: run vision detection on all frames in parallel ─────
+  const frameResultSets = await Promise.allSettled(
+    frames.map(async (frame, idx) => {
+      const visionCalls = [];
+      if (process.env.GEMINI_API_KEY)
+        visionCalls.push(
+          callGeminiVisionDetect(frame, `F${idx + 1}-Gemini`)
+            .catch(e => { console.warn(`[CONSENSUS] Gemini F${idx+1} failed:`, e.message); return null; })
+        );
+      if (process.env.NVIDIA_VISION_KEY)
+        visionCalls.push(
+          callNemotronVision(frame, `F${idx + 1}-Nemotron`)
+            .catch(e => { console.warn(`[CONSENSUS] Nemotron F${idx+1} failed:`, e.message); return null; })
+        );
+      const settled = await Promise.allSettled(visionCalls);
+      return settled
+        .filter(r => r.status === 'fulfilled' && r.value)
+        .map(r => r.value);
+    })
+  );
+
+  const allDetections = frameResultSets
+    .filter(r => r.status === 'fulfilled')
+    .flatMap(r => r.value)
+    .filter(Boolean);
+
+  console.log(`[CONSENSUS] ${allDetections.length} detections across ${frames.length} frames`);
+
+  if (allDetections.length === 0) {
+    throw new Error('All vision models failed across all frames');
+  }
+
+  // ── Phase 2: build candidate frequency + confidence map ──────────
+  const candidateMap = {};
+  for (const det of allDetections) {
+    const key = normalizeObjectName(det.object || det.name || '');
+    if (!key || key.length < 2) continue;
+    if (!candidateMap[key]) {
+      candidateMap[key] = { count: 0, totalConf: 0, raw: det };
+    }
+    candidateMap[key].count++;
+    candidateMap[key].totalConf += (det.confidence ?? 0.5);
+  }
+
+  const sorted = Object.entries(candidateMap)
+    .map(([name, v]) => ({ name, score: (v.count / allDetections.length) * (v.totalConf / v.count) }))
+    .sort((a, b) => b.score - a.score);
+
+  const topCandidates = sorted.slice(0, 3).map(c => c.name);
+  const top = sorted[0];
+  const confidence = top ? top.score : 0;
+  const needsRescan = confidence < 0.40;
+
+  console.log(`[CONSENSUS] Top: "${top?.name}" score=${confidence.toFixed(2)} needsRescan=${needsRescan}`);
+
+  if (needsRescan) {
+    return { dna: null, confidence, candidates: topCandidates, needsRescan: true };
+  }
+
+  // ── Phase 3: If tie between top 2 (within 10%), run DeepSeek verify
+  let objectName = top.name;
+  if (sorted.length >= 2 && (sorted[0].score - sorted[1].score) < 0.10 && process.env.NVIDIA_REASON_KEY) {
+    try {
+      objectName = await callDeepseekVerify(topCandidates, `F1-DeepSeek`);
+      console.log(`[CONSENSUS] DeepSeek tiebreak → "${objectName}"`);
+    } catch (e) {
+      console.warn('[CONSENSUS] DeepSeek verify failed, using frequency winner:', e.message);
+    }
+  }
+
+  // ── Phase 4: Generate passport DNA for the winning object ────────
+  let dna;
+  try {
+    dna = await raceManualBirth(objectName);
+  } catch (err) {
+    console.warn('[CONSENSUS] DNA generation failed, using validateDNA fallback:', err.message);
+    dna = validateDNA({ name: objectName, objectType: objectName });
+  }
+
+  return { dna, confidence, candidates: topCandidates, needsRescan: false };
+}
+
 async function raceManualBirth(objectName) {
   const promises = [];
   if (process.env.GEMINI_API_KEY) promises.push(callGeminiManualBirth(objectName));
@@ -655,6 +762,74 @@ async function callGeminiLifeScript(dna) {
   return validateLifeScript(raw);
 }
 
+// ── VISION INSPECTOR: lightweight object-only detection for consensus
+const VISION_INSPECTOR_PROMPT = `You are a precision computer-vision object identification system.
+You ONLY identify the PRIMARY PHYSICAL OBJECT being deliberately presented close to the camera.
+
+STRICT RULES:
+- Ignore backgrounds, walls, tables, hands, persons
+- Focus on the CLOSEST and MOST PROMINENT object
+- Be SPECIFIC: "ballpoint pen" not just "pen"; "plastic water bottle" not just "bottle"
+- If no clear foreground object, set uncertain: true and confidence < 0.3
+- Never invent details not visible in the image
+
+Return ONLY this JSON (no markdown, no explanation):
+{
+  "object": "specific object name",
+  "category": "broad category (stationery/electronics/food/clothing/tool/other)",
+  "alternatives": [],
+  "confidence": 0.0,
+  "uncertain": false
+}`;
+
+async function callGeminiVisionDetect(base64Image, label) {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) throw new Error('GEMINI_API_KEY not set');
+
+  const rawBase64 = base64Image.replace(/^data:image\/\w+;base64,/, '');
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent`;
+
+  const body = {
+    system_instruction: { parts: [{ text: VISION_INSPECTOR_PROMPT }] },
+    contents: [{
+      parts: [
+        { text: 'Identify the primary object in this image.' },
+        { inline_data: { mime_type: 'image/jpeg', data: rawBase64 } },
+      ],
+    }],
+    generation_config: {
+      temperature: 0.1,
+      max_output_tokens: 256,
+      response_mime_type: 'application/json',
+    },
+  };
+
+  const retryDelays = [1000, 2000, 4000];
+  for (let attempt = 0; attempt <= 3; attempt++) {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-goog-api-key': apiKey },
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) {
+      const errBody = await response.text();
+      if ((response.status === 429 || response.status === 503) && attempt < 3) {
+        console.warn(`[GEMINI-VISION] ${response.status} on ${label}, retrying in ${retryDelays[attempt]}ms...`);
+        await new Promise(r => setTimeout(r, retryDelays[attempt]));
+        continue;
+      }
+      throw new Error(`Gemini-Vision ${response.status}: ${errBody.substring(0, 200)}`);
+    }
+    const data = await response.json();
+    const content = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!content) throw new Error('No content in Gemini-Vision response');
+    const parsed = extractJSON(content);
+    if (!parsed) throw new Error('Could not parse Gemini-Vision JSON');
+    console.log(`[GEMINI-VISION] ${label} → "${parsed.object}" (${(parsed.confidence * 100).toFixed(0)}%)`);
+    return parsed;
+  }
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // NVIDIA API CALLS
 // ═══════════════════════════════════════════════════════════════════
@@ -888,6 +1063,113 @@ async function callNvidiaLifeScript(dna) {
   return validateLifeScript(raw);
 }
 
+// ── NEMOTRON OMNI 30B: vision detection using NVIDIA_VISION_KEY ─────
+async function callNemotronVision(base64Image, label) {
+  const apiKey = process.env.NVIDIA_VISION_KEY;
+  if (!apiKey) throw new Error('NVIDIA_VISION_KEY not set');
+
+  const imageUrl = base64Image.startsWith('data:')
+    ? base64Image
+    : `data:image/jpeg;base64,${base64Image}`;
+
+  const payload = {
+    model: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning',
+    messages: [
+      { role: 'system', content: VISION_INSPECTOR_PROMPT },
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Identify the primary physical object in this image. Return JSON only.' },
+          { type: 'image_url', image_url: { url: imageUrl } },
+        ],
+      },
+    ],
+    max_tokens: 512,
+    temperature: 0.1,
+    stream: false,
+  };
+
+  console.log(`[NEMOTRON-VISION] ${label}...`);
+  const startTime = Date.now();
+
+  const response = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const errBody = await response.text();
+    throw new Error(`Nemotron-Vision ${response.status}: ${errBody.substring(0, 200)}`);
+  }
+
+  const data = await response.json();
+  console.log(`[NEMOTRON-VISION] ${label} done in ${Date.now() - startTime}ms`);
+
+  // Nemotron may wrap reasoning in <think>...</think> tags — strip them
+  const rawContent = data.choices?.[0]?.message?.content || '';
+  const cleanContent = rawContent.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+  const parsed = extractJSON(cleanContent);
+  if (!parsed) throw new Error('Could not parse Nemotron-Vision JSON');
+  console.log(`[NEMOTRON-VISION] ${label} → "${parsed.object}" (${((parsed.confidence ?? 0) * 100).toFixed(0)}%)`);
+  return parsed;
+}
+
+// ── DEEPSEEK V4 PRO: text reasoning for tie-break ───────────────────
+async function callDeepseekVerify(candidates, label) {
+  const apiKey = process.env.NVIDIA_REASON_KEY;
+  if (!apiKey) throw new Error('NVIDIA_REASON_KEY not set');
+
+  const candidateList = candidates.map((c, i) => `${i + 1}. ${c}`).join('\n');
+  const systemPrompt = `You are a precise object identification tiebreak system.
+Given a short list of candidate object names detected by different vision models from the same camera scene, pick the single most likely object.
+Return ONLY valid JSON: {"winner": "chosen object name"}`;
+
+  const userPrompt = `Vision models detected these candidates from the same scene:\n${candidateList}\n\nPick the single most likely object the user is holding up to the camera.`;
+
+  const payload = {
+    model: 'deepseek-ai/deepseek-v4-pro-0813',
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt },
+    ],
+    max_tokens: 128,
+    temperature: 0.0,
+    stream: false,
+  };
+
+  console.log(`[DEEPSEEK-VERIFY] ${label} candidates:`, candidates);
+  const response = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const errBody = await response.text();
+    throw new Error(`DeepSeek-Verify ${response.status}: ${errBody.substring(0, 200)}`);
+  }
+
+  const data = await response.json();
+  const rawContent = data.choices?.[0]?.message?.content || '';
+  const cleanContent = rawContent.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+  const parsed = extractJSON(cleanContent);
+  if (parsed?.winner) {
+    console.log(`[DEEPSEEK-VERIFY] Winner: "${parsed.winner}"`);
+    return parsed.winner;
+  }
+  // Fallback: return first candidate
+  return candidates[0];
+}
+
 async function callNvidiaStreamLifeScript(dna) {
   const raw = await callNvidiaStreamText(LIFE_SCRIPT_SYSTEM_PROMPT, lifeScriptUserPrompt(dna), `Life Script`);
   return validateLifeScript(raw);
@@ -1091,6 +1373,7 @@ export {
   raceManualBirth,
   raceLifeScript,
   raceAIs,
+  consensusBirth,
   localImmigrationHeuristic,
   getFallbackLifeScript,
   validateDNA,
@@ -1100,6 +1383,7 @@ export {
   callGeminiBirth,
   callGeminiManualBirth,
   callGeminiLifeScript,
+  callGeminiVisionDetect,
   callNvidiaText,
   callNvidiaImage,
   callNvidiaStreamImage,
@@ -1109,5 +1393,7 @@ export {
   callNvidiaManualBirth,
   callNvidiaStreamManualBirth,
   callNvidiaLifeScript,
-  callNvidiaStreamLifeScript
+  callNvidiaStreamLifeScript,
+  callNemotronVision,
+  callDeepseekVerify
 };
