@@ -604,7 +604,9 @@ It's to give a completely unnecessary amount of documentation to an object that 
 
 ## Video
 
-[![Demo Video](https://img.youtube.com/vi/yjweS-yms6Q/maxresdefault.jpg)](https://youtu.be/yjweS-yms6Q)
+[![Demo Video]
+
+link : https://youtu.be/yjweS-yms6Q
 
 *The demo demonstrates the complete journey of an ordinary physical object from camera recognition to passport creation, immigration, interactive gameplay, AI-generated consequences, major events and its inevitable ending.*
 
