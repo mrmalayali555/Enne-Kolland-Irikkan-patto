@@ -383,7 +383,8 @@ Just Died
    📜 LIFE SUMMARY
 ```
 
----
+---🌐 Live Journal Link:
+👉 https://mrmalayali555.github.io/Enne-Kolland-Irikkan-patto/journal/
 
 # How The AI Works
 
