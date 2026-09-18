@@ -185,7 +185,17 @@ Then open the local URL provided by Vite.
 ---
 
 # Project Documentation
+# Project Demo
 
+## Video
+
+[![Demo Video]
+
+link : https://youtu.be/yjweS-yms6Q
+
+*The demo demonstrates the complete journey of an ordinary physical object from camera recognition to passport creation, immigration, interactive gameplay, AI-generated consequences, major events and its inevitable ending.*
+
+---   
 ## Screenshots
 
 ### 1. Object Passport
@@ -600,39 +610,8 @@ The point isn't to create a useful database.
 It's to give a completely unnecessary amount of documentation to an object that never asked for any of it.
 
 ---
-# Project Demo
 
-## Video
 
-[![Demo Video]
-
-link : https://youtu.be/yjweS-yms6Q
-
-*The demo demonstrates the complete journey of an ordinary physical object from camera recognition to passport creation, immigration, interactive gameplay, AI-generated consequences, major events and its inevitable ending.*
-
----   
-
-# Additional Demos
-
-### 🎥 Build / Documentary
-
-[Add build video link here]
-
-*Behind the scenes of building an unnecessarily complicated life simulator for objects during an 18-hour make-a-thon.*
-
-### 🎮 Live Demo
-
-[Add live demo link here]
-
-*Show an ordinary object to the camera and discover what kind of life it gets.*
-
-### 💀 Death Demonstration
-
-[Add additional demo link here]
-
-*Because apparently the project needs evidence that objects actually die.*
-
----
 
 ## Team Contributions
 
