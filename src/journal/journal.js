@@ -258,9 +258,9 @@ function initPremamDialogueSound() {
 
   function getAudio() {
     if (!audio) {
-      audio = new Audio('/journal/audio/enik.mp3');
+      audio = new Audio('./audio/enik.mp3');
       audio.onerror = () => {
-        audio = new Audio('/enik.mp3');
+        audio = new Audio('../enik.mp3');
       };
     }
     return audio;
