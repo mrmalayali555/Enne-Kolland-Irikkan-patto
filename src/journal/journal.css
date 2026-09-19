@@ -1505,10 +1505,50 @@ header, section, footer, .j-section, .j-sky-hero, .j-manifesto-poster {
   position: relative;
   width: 100%;
   max-width: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
   background: linear-gradient(180deg, #2b7fff 0%, #60a5fa 38%, #bae6fd 72%, var(--j-paper) 100%);
-  padding: var(--j-space-2xl) var(--j-space-lg) var(--j-space-2xl);
+  padding: var(--j-space-xl) var(--j-space-lg);
   overflow: hidden;
   border-bottom: 2.5px solid var(--j-ink);
+  box-sizing: border-box;
+}
+
+.j-sky-hero > .j-container {
+  width: 100%;
+  max-width: var(--j-wide-width);
+  margin: auto 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  z-index: 2;
+}
+
+.j-sky-scroll-hint {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: default;
+}
+
+@keyframes jBounceDown {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(6px);
+  }
+}
+
+.j-bounce-indicator {
+  animation: jBounceDown 1.8s infinite ease-in-out;
 }
 
 .j-cloud-band {
@@ -3086,14 +3126,45 @@ header, section, footer, .j-section, .j-sky-hero, .j-manifesto-poster {
   }
 
   .j-sky-hero {
-    padding: var(--j-space-xl) var(--j-space-sm) var(--j-space-xl);
+    min-height: 100vh !important;
+    min-height: 100dvh !important;
+    padding: calc(var(--j-space-lg) + env(safe-area-inset-top, 0px)) var(--j-space-sm) calc(var(--j-space-lg) + env(safe-area-inset-bottom, 0px)) !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: center !important;
+    align-items: center !important;
+  }
+
+  .j-sky-hero > .j-container {
+    margin: auto 0 !important;
+    width: 100% !important;
+    padding: 0 4px !important;
+  }
+
+  .j-sky-meta {
+    flex-direction: column !important;
+    align-items: center !important;
+    text-align: center !important;
+    gap: 8px !important;
+    margin-bottom: 12px !important;
   }
 
   .j-sky-title {
-    font-size: clamp(1.8rem, 8.2vw, 2.35rem) !important;
+    font-size: clamp(2rem, 9.5vw, 2.75rem) !important;
     line-height: 1.25 !important;
     max-width: 100% !important;
-    margin: 10px auto 14px !important;
+    margin: 12px auto 16px !important;
+  }
+
+  .j-sky-sub {
+    font-size: clamp(1rem, 4.2vw, 1.25rem) !important;
+    line-height: 1.4 !important;
+    padding: 0 4px !important;
+    max-width: 96% !important;
+  }
+
+  .j-sky-scroll-hint {
+    margin-top: 1.8rem !important;
   }
 
   .j-terminal {
@@ -3110,6 +3181,16 @@ header, section, footer, .j-section, .j-sky-hero, .j-manifesto-poster {
 
 /* Tablet device typography (iPad, Android tablets) */
 @media (min-width: 481px) and (max-width: 768px) {
+  .j-sky-hero {
+    min-height: 100vh !important;
+    min-height: 100dvh !important;
+    padding: var(--j-space-xl) var(--j-space-md) !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: center !important;
+    align-items: center !important;
+  }
+
   .j-sky-title {
     font-size: clamp(2.5rem, 6.5vw, 3.6rem) !important;
     line-height: 1.18 !important;
