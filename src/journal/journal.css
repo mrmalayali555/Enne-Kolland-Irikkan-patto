@@ -1467,8 +1467,8 @@ header, section, footer, .j-section, .j-sky-hero, .j-manifesto-poster {
 }
 
 .j-title-reveal__ml {
-  font-family: var(--j-font-ml-hand);
-  font-weight: 700;
+  font-family: 'Baloo Chettan 2', var(--j-font-ml-hand);
+  font-weight: 800;
   font-size: clamp(2rem, 5.5vw, 4.2rem);
   line-height: 1.25;
   margin-bottom: var(--j-space-sm);
