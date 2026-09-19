@@ -5,7 +5,7 @@
    ══════════════════════════════════════════════════════════════════ */
 
 /* ─── Font Imports ───────────────────────────────────────────────── */
-@import url('https://fonts.googleapis.com/css2?family=Anton&family=Instrument+Serif:ital@0;1&family=Outfit:wght@300;400;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Caveat:wght@400;500;600;700&family=Special+Elite&family=Anek+Malayalam:wght@400;600;700;800&family=Manjari:wght@400;700&family=Chilanka&family=Gayathri:wght@700&family=Gochi+Hand&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Anton&family=Baloo+Chettan+2:wght@600;700;800&family=Instrument+Serif:ital@0;1&family=Outfit:wght@300;400;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Caveat:wght@400;500;600;700&family=Special+Elite&family=Anek+Malayalam:wght@400;600;700;800&family=Manjari:wght@400;700&family=Chilanka&family=Gayathri:wght@700&family=Gochi+Hand&display=swap');
 
 /* ─── Design Tokens ──────────────────────────────────────────────── */
 :root {
@@ -1506,7 +1506,7 @@ header, section, footer, .j-section, .j-sky-hero, .j-manifesto-poster {
   width: 100%;
   max-width: 100%;
   background: linear-gradient(180deg, #2b7fff 0%, #60a5fa 38%, #bae6fd 72%, var(--j-paper) 100%);
-  padding: var(--j-space-2xl) var(--j-space-lg) var(--j-space-3xl);
+  padding: var(--j-space-2xl) var(--j-space-lg) var(--j-space-2xl);
   overflow: hidden;
   border-bottom: 2.5px solid var(--j-ink);
 }
@@ -1533,24 +1533,26 @@ header, section, footer, .j-section, .j-sky-hero, .j-manifesto-poster {
 }
 
 .j-sky-title {
-  font-family: var(--j-font-ml-hand);
-  font-weight: 700;
-  font-size: clamp(2.2rem, 8vw, 7.5rem);
+  font-family: 'Baloo Chettan 2', 'Anek Malayalam', 'Gayathri', sans-serif;
+  font-weight: 800;
+  font-size: clamp(2.6rem, 5.5vw, 6.2rem);
   line-height: 1.15;
   color: #ffffff;
-  text-shadow: 0 4px 20px rgba(0, 0, 0, 0.3), 0 1px 4px rgba(0, 0, 0, 0.35);
-  margin: var(--j-space-sm) 0;
+  text-shadow: 0 4px 24px rgba(0, 0, 0, 0.45), 0 2px 6px rgba(0, 0, 0, 0.4);
+  margin: var(--j-space-sm) auto var(--j-space-md);
   letter-spacing: -0.01em;
   word-break: break-word;
   overflow-wrap: break-word;
+  max-width: 18ch;
 }
 
 .j-sky-sub {
   font-family: var(--j-font-hand);
-  font-size: clamp(1.2rem, 2.5vw, 1.9rem);
+  font-size: clamp(1.15rem, 2.2vw, 1.85rem);
   font-weight: 700;
   color: var(--j-ink);
-  margin-bottom: var(--j-space-xl);
+  margin: 0 auto;
+  max-width: 750px;
 }
 
 .j-facility-card {
@@ -3083,6 +3085,17 @@ header, section, footer, .j-section, .j-sky-hero, .j-manifesto-poster {
     padding: var(--j-space-lg) var(--j-space-sm);
   }
 
+  .j-sky-hero {
+    padding: var(--j-space-xl) var(--j-space-sm) var(--j-space-xl);
+  }
+
+  .j-sky-title {
+    font-size: clamp(1.8rem, 8.2vw, 2.35rem) !important;
+    line-height: 1.25 !important;
+    max-width: 100% !important;
+    margin: 10px auto 14px !important;
+  }
+
   .j-terminal {
     font-size: 0.75rem;
     padding: 14px 16px;
@@ -3092,5 +3105,23 @@ header, section, footer, .j-section, .j-sky-hero, .j-manifesto-poster {
   .j-sticky {
     max-width: 100% !important;
     transform: none !important;
+  }
+}
+
+/* Tablet device typography (iPad, Android tablets) */
+@media (min-width: 481px) and (max-width: 768px) {
+  .j-sky-title {
+    font-size: clamp(2.5rem, 6.5vw, 3.6rem) !important;
+    line-height: 1.18 !important;
+    max-width: 15ch !important;
+  }
+}
+
+/* Large monitors, 4K displays & Smart TVs */
+@media (min-width: 1441px) {
+  .j-sky-title {
+    font-size: clamp(5.4rem, 5.5vw, 7.5rem) !important;
+    line-height: 1.08 !important;
+    max-width: 20ch !important;
   }
 }
