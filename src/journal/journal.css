@@ -3206,3 +3206,141 @@ header, section, footer, .j-section, .j-sky-hero, .j-manifesto-poster {
     max-width: 20ch !important;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   SECTIONS 14 & 15: TECHNICAL ARCHITECTURE & COMMUNITY STYLES
+   ═══════════════════════════════════════════════════════════════════ */
+
+.j-tech-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--j-space-lg);
+  margin-top: var(--j-space-xl);
+}
+
+.j-tech-card {
+  background: #ffffff;
+  border: 2px solid var(--j-ink);
+  box-shadow: 5px 6px 0px var(--j-ink);
+  border-radius: 4px;
+  padding: 22px 20px;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  transition: transform 0.2s var(--j-ease-out), box-shadow 0.2s var(--j-ease-out);
+}
+
+.j-tech-card:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 7px 8px 0px var(--j-ink);
+}
+
+.j-tech-card__tag {
+  display: inline-block;
+  align-self: flex-start;
+  font-family: var(--j-font-mono);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: var(--j-riso-yellow);
+  color: #000;
+  padding: 3px 8px;
+  border: 1px solid #000;
+  border-radius: 2px;
+  margin-bottom: 10px;
+}
+
+.j-tech-card__title {
+  font-family: var(--j-font-heading);
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--j-ink);
+  margin-bottom: 8px;
+}
+
+.j-tech-card__desc {
+  font-size: 0.88rem;
+  color: var(--j-ink-dim);
+  line-height: 1.55;
+  margin-bottom: 14px;
+  flex-grow: 1;
+}
+
+.j-tech-card__code {
+  font-family: var(--j-font-mono);
+  font-size: 0.73rem;
+  background: #0f1216;
+  color: #55efc4;
+  padding: 10px 12px;
+  border-radius: 3px;
+  border: 1px solid #334155;
+  overflow-x: auto;
+  line-height: 1.4;
+}
+
+.j-community-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--j-space-lg);
+  margin-top: var(--j-space-xl);
+}
+
+.j-community-card {
+  background: var(--j-paper-warm);
+  border: 2px solid var(--j-ink);
+  box-shadow: 4px 5px 0px var(--j-ink);
+  border-radius: 4px;
+  padding: 20px 18px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.j-community-card__header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+  border-bottom: 1.5px dashed rgba(26, 26, 26, 0.2);
+  padding-bottom: 10px;
+}
+
+.j-community-card__icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: #000;
+  color: var(--j-riso-lime);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+  font-family: var(--j-font-mono);
+  font-size: 1rem;
+  border: 1.5px solid #000;
+  flex-shrink: 0;
+}
+
+.j-community-card__name {
+  font-family: var(--j-font-heading);
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--j-ink);
+}
+
+.j-community-card__role {
+  font-family: var(--j-font-mono);
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--j-stamp-red);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.j-community-card__quote {
+  font-size: 0.88rem;
+  color: var(--j-ink-dim);
+  line-height: 1.55;
+}
+
