@@ -2044,9 +2044,196 @@
 
 
   <!-- ═══════════════════════════════════════════════════════════════
-       SECTION 15 — THE END (MANIFESTO & EPILOGUE)
+       SECTION 14 — UNDER THE HOOD: THE DUAL-AI VISION ARCHITECTURE
+       Technical depth, models, canvas consensus, prompt engineering
        ═══════════════════════════════════════════════════════════════ -->
-  <footer class="j-manifesto-poster" data-section="15-end" id="end">
+  <section class="j-section" data-section="14-tech" id="tech" style="background: #0f1216; color: #ffffff; border-top: 2px solid var(--j-ink);">
+
+    <div class="j-container--wide">
+
+      <div class="j-text-center j-reveal">
+        <span class="j-stamp j-stamp--approved" style="--stamp-rotation: -2deg; margin-bottom: 12px; display: inline-block; border-color: var(--j-riso-lime); color: var(--j-riso-lime);">
+          DEEP DIVE // SYSTEM TELEMETRY
+        </span>
+        <h2 class="j-heading j-heading--xl" style="color: #ffffff; margin-bottom: 8px;">
+          UNDER THE HOOD: THE DUAL-AI VISION ARCHITECTURE
+        </h2>
+        <p class="j-mono--status" style="color: var(--j-riso-cyan); max-width: 700px; margin: 0 auto;">
+          HOW A SILLY PREMISE WAS BUILT ON SERIOUS ENGINEERING: DUAL-MODEL RACING, MULTI-FRAME CONSENSUS, AND ZERO-WIFI RESILIENCE.
+        </p>
+      </div>
+
+      <div class="j-tech-grid">
+
+        <!-- Tech Pillar 1 -->
+        <div class="j-tech-card j-reveal" style="background: #181d24; border-color: #334155; color: #f1f5f9;">
+          <span class="j-tech-card__tag" style="background: var(--j-riso-cyan); color: #000;">PILLAR 01 // REDUNDANCY &amp; LATENCY</span>
+          <h3 class="j-tech-card__title" style="color: #ffffff;">Dual-AI Async Race Engine</h3>
+          <p class="j-tech-card__desc" style="color: #94a3b8;">
+            With 100+ makers straining SCMS college WiFi, external API calls frequently spiked to 8+ seconds or threw 429 rate limits. We built an asynchronous race architecture firing <strong>Google Gemini 2.0 Flash</strong> (strong visual object detection) and <strong>NVIDIA Nemotron</strong> simultaneously. Whichever provider responds first with valid JSON wins the passport grant. Roundtrip latency plummeted to &lt;1.2 seconds.
+          </p>
+          <div class="j-tech-card__code">
+            <span style="color: #f79cff;">const</span> winner = <span style="color: #f79cff;">await</span> Promise.race([<br>
+            &nbsp;&nbsp;callGeminiVision(frames),<br>
+            &nbsp;&nbsp;callNemotronVision(frames)<br>
+            ]);
+          </div>
+        </div>
+
+        <!-- Tech Pillar 2 -->
+        <div class="j-tech-card j-reveal" style="background: #181d24; border-color: #334155; color: #f1f5f9; transition-delay: 0.1s;">
+          <span class="j-tech-card__tag" style="background: var(--j-riso-yellow); color: #000;">PILLAR 02 // COMPUTER VISION</span>
+          <h3 class="j-tech-card__title" style="color: #ffffff;">Multi-Frame Canvas Consensus</h3>
+          <p class="j-tech-card__desc" style="color: #94a3b8;">
+            Holding a physical object in front of a laptop camera in dim midnight lighting produces severe motion blur. Single-shot image detection frequently hallucinated bananas as lightbulbs. Our client pipeline streams from <code>navigator.mediaDevices</code> into an offscreen HTML5 <code>&lt;canvas&gt;</code>, captures 3 staggered frames across 600ms, standardizes aspect ratios, and dispatches multi-frame consensus to filter jitter.
+          </p>
+          <div class="j-tech-card__code">
+            <span style="color: #55efc4;">// 3-frame buffer consensus</span><br>
+            ctx.drawImage(video, 0, 0, 320, 240);<br>
+            <span style="color: #f79cff;">const</span> frames = await captureBuffer(3, 200);
+          </div>
+        </div>
+
+        <!-- Tech Pillar 3 -->
+        <div class="j-tech-card j-reveal" style="background: #181d24; border-color: #334155; color: #f1f5f9; transition-delay: 0.2s;">
+          <span class="j-tech-card__tag" style="background: var(--j-stamp-red); color: #fff;">PILLAR 03 // PROMPT ENGINEERING</span>
+          <h3 class="j-tech-card__title" style="color: #ffffff;">Satirical Manglish Persona &amp; Bribe State Machine</h3>
+          <p class="j-tech-card__desc" style="color: #94a3b8;">
+            Generic LLM system prompts produce sterile, polite corporate assistants. We engineered strict negative constraints and few-shot Manglish examples to enforce a cynical Kerala border official persona (<em>"mwone", "scene mone", "adichu shape maattum"</em>). It features an interactive bribe state machine: typing a ₹50 tea charge triggers facial state transitions (<code>stare</code> &rarr; <code>doubt</code> &rarr; <code>pass</code>) and unlocks passage!
+          </p>
+          <div class="j-tech-card__code">
+            <span style="color: #f79cff;">if</span> (bribeAmount &gt;= 50) {<br>
+            &nbsp;&nbsp;officer.mood = <span style="color: #c3ff16;">'pass'</span>;<br>
+            &nbsp;&nbsp;return <span style="color: #55efc4;">"₹50 tea charge accepted! APPROVED!"</span>;<br>
+            }
+          </div>
+        </div>
+
+        <!-- Tech Pillar 4 -->
+        <div class="j-tech-card j-reveal" style="background: #181d24; border-color: #334155; color: #f1f5f9; transition-delay: 0.3s;">
+          <span class="j-tech-card__tag" style="background: var(--j-riso-lime); color: #000;">PILLAR 04 // FAULT TOLERANCE</span>
+          <h3 class="j-tech-card__title" style="color: #ffffff;">Zero-WiFi Deterministic Heuristic Fallback</h3>
+          <p class="j-tech-card__desc" style="color: #94a3b8;">
+            At 03:30 AM, campus connectivity abruptly died. If the app crashed during judge testing, game over. We implemented <code>generateSmartPassport()</code>: a zero-dependency deterministic heuristic generator that hashes the object's string name into mathematical seeds to calculate unique passport IDs, existential missions, and death clocks entirely in &lt;10ms offline.
+          </p>
+          <div class="j-tech-card__code">
+            <span style="color: #f79cff;">catch</span> (networkError) {<br>
+            &nbsp;&nbsp;<span style="color: #55efc4;">// Instant 10ms offline generation</span><br>
+            &nbsp;&nbsp;<span style="color: #f79cff;">return</span> generateSmartPassport(objectName);<br>
+            }
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+
+  </section>
+
+
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       SECTION 15 — THE SQUAD THAT WASN'T A TEAM: COMMUNITY & COLLABORATION
+       TinkerHub friends: Nikhil, Murshu, Fifaa, Niranjana, Alok, Albin, Ajay
+       ═══════════════════════════════════════════════════════════════ -->
+  <section class="j-section" data-section="15-community" id="community" style="background: var(--j-paper); border-top: 2.5px solid var(--j-ink);">
+
+    <div class="j-container--wide">
+
+      <div class="j-text-center j-reveal">
+        <span class="j-badge-index" style="background: var(--j-passport); color: #fff; margin-bottom: 10px;">
+          COMMUNITY &amp; SQUAD DYNAMICS
+        </span>
+        <h2 class="j-heading j-heading--xl" style="margin-bottom: 8px;">
+          THE SQUAD THAT WASN'T A TEAM
+        </h2>
+        <p class="j-mono--status" style="color: var(--j-stamp-red); max-width: 750px; margin: 0 auto;">
+          ON PAPER, I WAS REGISTERED AS "01 MAKER // 1 TIRED STUDENT". IN REALITY, THIS PROJECT WAS POWERED BY THE TINKERHUB SCMS COMMUNITY.
+        </p>
+      </div>
+
+      <!-- Narrative Lead -->
+      <div class="j-reveal" style="max-width: 820px; margin: var(--j-space-lg) auto 0; font-size: 1.05rem; line-height: 1.8; color: var(--j-ink);">
+        <p style="margin-bottom: 16px;">
+          Hackathons often look like isolated teams huddled over keyboards with headphones on. But Useless Projects 3.0 at SCMS School of Engineering was completely different. Even though many of us came in solo or in small squads, the late-night pressure erased all classroom divisions. We weren't competing against each other — we were all fighting the same 03:00 AM sleep monster.
+        </p>
+      </div>
+
+      <!-- Community Grid Cards -->
+      <div class="j-community-grid">
+
+        <!-- Card 1: The Core Sanity Keepers -->
+        <div class="j-community-card j-reveal">
+          <div class="j-community-card__header">
+            <div class="j-community-card__icon" style="background: #2b303a; color: var(--j-riso-yellow);">
+              01
+            </div>
+            <div>
+              <h4 class="j-community-card__name">Nikhil, Murshu, Fifaa &amp; Niranjana</h4>
+              <span class="j-community-card__role">THE MIDNIGHT TEST SQUAD</span>
+            </div>
+          </div>
+          <p class="j-community-card__quote">
+            "They were sitting right nearby throughout the night. Whenever my computer vision pipeline needed testing, they didn't just give feedback — they emptied their backpacks. Water bottles, biscuit wrappers, broken pens, ID cards. They helped debate whether a crushed tube of Colgate had constitutional rights under object law, and kept spirits high through every API crash."
+          </p>
+        </div>
+
+        <!-- Card 2: Inter-Class Connections -->
+        <div class="j-community-card j-reveal" style="transition-delay: 0.1s;">
+          <div class="j-community-card__header">
+            <div class="j-community-card__icon" style="background: var(--j-passport); color: #fff;">
+              02
+            </div>
+            <div>
+              <h4 class="j-community-card__name">Alok, Albin &amp; Ajay</h4>
+              <span class="j-community-card__role">CROSS-BATCH COMRADES</span>
+            </div>
+          </div>
+          <p class="j-community-card__quote">
+            "Different branches, different classes. In normal college life, you walk past each other in the corridors without a word. But at 02:00 AM on the lab floor, they were sharing phone hotspots when the college network choked, debugging build errors together, exchanging charging cables, and cheering on every absurd stage demo."
+          </p>
+        </div>
+
+        <!-- Card 3: The Murshu Catalyst -->
+        <div class="j-community-card j-reveal" style="transition-delay: 0.2s;">
+          <div class="j-community-card__header">
+            <div class="j-community-card__icon" style="background: var(--j-stamp-red); color: #fff;">
+              03
+            </div>
+            <div>
+              <h4 class="j-community-card__name">Murshuu's Chaos Engine</h4>
+              <span class="j-community-card__role">CHIEF MORALE OFFICER</span>
+            </div>
+          </div>
+          <p class="j-community-card__quote">
+            "When the room went silent at 02:30 AM and everyone was staring blankly at syntax errors, Murshu walked across the lab tables doing unscripted comedy and motivation. That laughter was more effective than three cans of Red Bull. It transformed exhaustion into pure creative momentum."
+          </p>
+        </div>
+
+      </div>
+
+      <!-- Handwritten Sticky Note Reflection -->
+      <div class="j-reveal" style="max-width: 680px; margin: var(--j-space-xl) auto 0; text-align: center;">
+        <div class="j-sticky j-sticky--yellow" style="--sticky-rotation: -1.5deg; display: inline-block; text-align: left; padding: 22px 26px;">
+          <p class="j-hand" style="font-size: 1.25rem; font-weight: 700; color: #1a1a1a; line-height: 1.5; margin-bottom: 8px;">
+            "If Useless Projects 3.0 hadn't happened, I probably would never have met or connected with Alok, Albin, Ajay, Nikhil, Murshu, Fifaa, and Niranjana. Even though we weren't registered as a single team, we worked as one big team — helping everyone, laughing together, and surviving 18 hours of ridiculous making."
+          </p>
+          <span class="j-mono" style="font-size: 0.75rem; color: #6b6b6b; font-weight: bold; text-transform: uppercase;">
+            — Justin // SCMS SSET Makerspace, 08:00 AM
+          </span>
+        </div>
+      </div>
+
+    </div>
+
+  </section>
+
+
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       SECTION 16 — THE END (MANIFESTO & EPILOGUE)
+       ═══════════════════════════════════════════════════════════════ -->
+  <footer class="j-manifesto-poster" data-section="16-end" id="end">
 
     <div class="j-container" style="position: relative; z-index: 10;">
 
